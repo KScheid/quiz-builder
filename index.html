@@ -3,398 +3,709 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz & Exam Prep</title>
+    <title>QuizPrep - Modern Exam & Quiz Platform</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
-        /* CSS Variables for Light & Dark Themes */
         :root {
-            --primary: #3b82f6; --primary-hover: #2563eb;
-            --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
-            --radius: 8px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-light: rgba(79, 70, 229, 0.1);
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-pill: 9999px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
         }
 
+        /* Light Mode */
         [data-theme="light"] {
-            --bg: #f3f4f6; --surface: #ffffff; --text: #1f2937; --text-muted: #6b7280;
-            --border: #e5e7eb; --input-bg: #f9fafb;
-            --correct-bg: #dcfce7; --correct-text: #166534;
-            --wrong-bg: #fee2e2; --wrong-text: #991b1b;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-secondary: #f1f5f9;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --border-hover: #cbd5e1;
+            --correct-bg: #ecfdf5;
+            --correct-text: #065f46;
+            --correct-border: #34d399;
+            --wrong-bg: #fef2f2;
+            --wrong-text: #991b1b;
+            --wrong-border: #f87171;
+            --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
         }
 
+        /* Dark Mode */
         [data-theme="dark"] {
-            --bg: #111827; --surface: #1f2937; --text: #f9fafb; --text-muted: #9ca3af;
-            --border: #374151; --input-bg: #111827;
-            --correct-bg: #064e3b; --correct-text: #a7f3d0;
-            --wrong-bg: #7f1d1d; --wrong-text: #fecaca;
+            --bg: #090d16;
+            --surface: #111827;
+            --surface-secondary: #1a2234;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #1e293b;
+            --border-hover: #334155;
+            --correct-bg: #064e3b;
+            --correct-text: #a7f3d0;
+            --correct-border: #059669;
+            --wrong-bg: #7f1d1d;
+            --wrong-text: #fecaca;
+            --wrong-border: #dc2626;
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
         }
 
-        body { background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; transition: background-color 0.3s, color 0.3s; line-height: 1.6; }
-        
-        .container { max-width: 800px; margin: 0 auto; }
-        .card { background: var(--surface); padding: 25px; border-radius: var(--radius); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid var(--border); margin-bottom: 20px; }
-        .hidden { display: none !important; }
-        
-        /* Header & Theme */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        select, input[type="text"], input[type="file"], textarea { 
-            width: 100%; padding: 10px; margin: 8px 0 16px 0; border-radius: var(--radius);
-            border: 1px solid var(--border); background: var(--input-bg); color: var(--text); box-sizing: border-box; font-family: inherit;
+        * { box-sizing: border-box; }
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 24px 16px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            line-height: 1.5;
+            min-height: 100vh;
         }
-        textarea { resize: vertical; min-height: 100px; }
+
+        .container { max-width: 780px; margin: 0 auto; }
+
+        /* Top Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            background: linear-gradient(135deg, #4f46e5, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Pill Slider Theme Switcher */
+        .pill-switch {
+            position: relative;
+            display: flex;
+            background: var(--surface-secondary);
+            padding: 4px;
+            border-radius: var(--radius-pill);
+            border: 1px solid var(--border);
+            width: 210px;
+        }
+        .pill-switch button {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 6px 0;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            z-index: 2;
+            transition: color 0.25s ease;
+        }
+        .pill-switch button.active { color: var(--text-main); }
+        .pill-slider {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            bottom: 4px;
+            width: calc((100% - 8px) / 3);
+            background: var(--surface);
+            border-radius: var(--radius-pill);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        /* Form Inputs */
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--surface-secondary);
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: var(--transition);
+        }
+        input[type="text"]:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+        textarea { min-height: 90px; resize: vertical; font-family: monospace; font-size: 0.85rem; }
+
+        /* Toggles and checkboxes */
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 18px 0;
+        }
+        .checkbox-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            background: var(--surface-secondary);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            user-select: none;
+            transition: var(--transition);
+        }
+        .checkbox-card:hover { border-color: var(--border-hover); }
+        .checkbox-card input { accent-color: var(--primary); cursor: pointer; width: 16px; height: 16px; }
 
         /* Buttons */
-        button { padding: 10px 16px; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 600; transition: background-color 0.2s; color: white; display: inline-flex; align-items: center; justify-content: center; gap: 6px;}
-        .btn-primary { background: var(--primary); }
-        .btn-primary:hover { background: var(--primary-hover); }
-        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
-        .btn-outline:hover { background: var(--primary); color: white; }
-        .btn-warning { background: var(--warning); color: #111827; }
-        .btn-small { padding: 6px 12px; font-size: 0.85em; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: var(--transition);
+        }
+        .btn-primary { background: var(--primary); color: #fff; width: 100%; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn-secondary { background: var(--surface-secondary); color: var(--text-main); border: 1px solid var(--border); }
+        .btn-secondary:hover { border-color: var(--border-hover); background: var(--border); }
+        .btn-flag { background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 6px 12px; border-radius: var(--radius-pill); font-size: 0.85rem; }
+        .btn-flag.active { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
 
         /* Prompt Box */
-        .prompt-box { background: var(--input-bg); border: 1px solid var(--border); padding: 15px; border-radius: var(--radius); font-family: monospace; font-size: 0.9em; white-space: pre-wrap; margin-bottom: 10px; color: var(--text-muted);}
-        
-        /* Progress Bar */
-        #progress-container { width: 100%; background: var(--border); border-radius: 99px; height: 8px; margin-bottom: 25px; overflow: hidden; }
-        #progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
-        
-        /* Quiz Elements */
-        .option-label { display: block; padding: 12px 15px; background: var(--input-bg); margin: 8px 0; border-radius: var(--radius); cursor: pointer; border: 1px solid var(--border); transition: border-color 0.2s; }
-        .option-label:hover { border-color: var(--primary); }
-        .correct-bg { background: var(--correct-bg) !important; color: var(--correct-text) !important; border-color: var(--correct-text) !important; }
-        .wrong-bg { background: var(--wrong-bg) !important; color: var(--wrong-text) !important; border-color: var(--wrong-text) !important; }
-        
-        /* Results */
-        .result-item { padding: 15px; margin-bottom: 15px; border-radius: var(--radius); border-left: 6px solid var(--border); background: var(--input-bg); }
-        .result-item.correct { border-left-color: var(--success); }
-        .result-item.wrong { border-left-color: var(--danger); }
-        .result-item.flagged { border-right: 6px solid var(--warning); }
-        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;}
+        .prompt-container {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            font-family: monospace;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            white-space: pre-wrap;
+            max-height: 120px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
 
-        h1, h2, h3 { margin-top: 0; }
-        hr { border: 0; border-top: 1px solid var(--border); margin: 25px 0; }
+        /* Progress Bar */
+        .progress-wrapper {
+            background: var(--surface-secondary);
+            border-radius: var(--radius-pill);
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #06b6d4);
+            width: 0%;
+            transition: width 0.35s ease;
+        }
+
+        /* Answers / Options */
+        .option-choice {
+            display: flex;
+            align-items: center;
+            padding: 14px 18px;
+            background: var(--surface-secondary);
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.98rem;
+            font-weight: 500;
+        }
+        .option-choice:hover:not(.disabled) {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            transform: translateY(-1px);
+        }
+        .option-choice input { margin-right: 14px; accent-color: var(--primary); }
+        
+        .option-choice.correct {
+            background: var(--correct-bg) !important;
+            border-color: var(--correct-border) !important;
+            color: var(--correct-text) !important;
+        }
+        .option-choice.wrong {
+            background: var(--wrong-bg) !important;
+            border-color: var(--wrong-border) !important;
+            color: var(--wrong-text) !important;
+        }
+        .option-choice.disabled { cursor: default; }
+
+        /* Results Display */
+        .result-row {
+            padding: 16px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            border-left: 5px solid var(--border);
+            background: var(--surface-secondary);
+            margin-bottom: 12px;
+        }
+        .result-row.correct { border-left-color: var(--success); }
+        .result-row.wrong { border-left-color: var(--danger); }
+        .result-row.flagged { border-right: 5px solid var(--warning); }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header">
-        <h1>🎓 QuizPrep</h1>
-        <div>
-            <select id="theme-select" style="width: auto; margin: 0; padding: 6px 12px;">
-                <option value="system">💻 System Theme</option>
-                <option value="light">☀️ Light Mode</option>
-                <option value="dark">🌙 Dark Mode</option>
-            </select>
+    <!-- Header -->
+    <header class="header">
+        <h1 class="brand">⚡ QuizPrep</h1>
+        <div class="pill-switch">
+            <div class="pill-slider" id="pillSlider"></div>
+            <button id="btnThemeLight" onclick="setTheme('light')">Light</button>
+            <button id="btnThemeSystem" onclick="setTheme('system')">Auto</button>
+            <button id="btnThemeDark" onclick="setTheme('dark')">Dark</button>
         </div>
-    </div>
+    </header>
 
     <!-- SETUP SCREEN -->
-    <div id="setup-screen">
+    <main id="setup-screen">
         <div class="card">
-            <h3>🤖 Step 1: Generate Questions via LLM</h3>
-            <p style="font-size: 0.9em; color: var(--text-muted);">Copy the prompt below, paste it into ChatGPT/Claude along with your study material, and it will generate the required CSV format.</p>
-            <div class="prompt-box" id="llm-prompt">I will provide you with study material. I need you to generate a quiz based on this material and output it STRICTLY as raw CSV format inside a code block. Do not include any other text. 
-Use these exact headers:
+            <h3 style="margin-top:0;">🤖 LLM Prompt Generator</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 8px;">
+                Copy this prompt into ChatGPT or Claude alongside your study notes to generate your quiz data:
+            </p>
+            <div class="prompt-container" id="llmPrompt">I will provide study material. Generate a quiz based strictly on this content. Format your output STRICTLY as raw CSV in a markdown code block, with these exact headers:
 Question,Type,Options,Answer,CaseSensitive
 
 Rules:
-1. 'Type' must be 'MC' (Multiple Choice) or 'WI' (Write-in).
-2. For MC, 'Options' must be separated by a pipe character (|). 'Answer' must exactly match one option. 'CaseSensitive' is FALSE.
-3. For WI, 'Options' is empty. 'Answer' must be a valid Regex pattern (e.g. ^apple$ for exact match). 'CaseSensitive' must be TRUE or FALSE.
+1. Type must be 'MC' (Multiple Choice) or 'WI' (Write-in).
+2. For MC: Options must be separated with a pipe character (|). Answer must match one of the options verbatim. CaseSensitive is FALSE.
+3. For WI: Options is blank. Answer must be a regular expression pattern (e.g., ^42$ or ^Paris$). CaseSensitive must be TRUE or FALSE.
 
-Here is my study material:
-[PASTE YOUR NOTES HERE]</div>
-            <button class="btn-primary btn-small" onclick="copyPrompt()">📋 Copy Prompt</button>
+Here is the material:
+[PASTE NOTES HERE]</div>
+            <button class="btn btn-secondary btn-sm" onclick="copyPrompt()">📋 Copy Prompt</button>
         </div>
 
         <div class="card">
-            <h3>📂 Step 2: Import & Start</h3>
+            <h3 style="margin-top:0;">📂 Import Questions</h3>
+            <label style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted);">Option 1: Paste CSV Data</label>
+            <textarea id="csvPaste" placeholder="Question,Type,Options,Answer,CaseSensitive..."></textarea>
             
-            <label style="font-weight: 600;">Option A: Paste CSV Text</label>
-            <textarea id="csv-text" placeholder="Paste the CSV output from ChatGPT here..."></textarea>
+            <div style="text-align: center; color: var(--text-muted); margin: 8px 0; font-size: 0.85rem;">— OR —</div>
             
-            <div style="text-align: center; font-weight: bold; margin: 10px 0; color: var(--text-muted);">— OR —</div>
-            
-            <label style="font-weight: 600;">Option B: Upload CSV File</label>
-            <input type="file" id="file-input" accept=".csv">
-            
-            <hr>
-            
-            <label style="font-weight: 600;">Select Mode:</label>
-            <select id="mode-select">
-                <option value="quiz">Quiz Mode (Learn as you go)</option>
-                <option value="exam">Exam Mode (Results at the end)</option>
+            <label style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted);">Option 2: Upload CSV File</label>
+            <input type="file" id="fileUpload" accept=".csv">
+
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+
+            <label style="font-weight: 600; font-size: 0.9rem;">Test Mode</label>
+            <select id="modeSelect" onchange="toggleAutoSubmitOption()" style="margin-top: 6px;">
+                <option value="quiz">Quiz Mode (Learn & practice with immediate feedback)</option>
+                <option value="exam">Exam Mode (Graded at the very end)</option>
             </select>
-            
-            <button class="btn-primary" style="width: 100%; padding: 12px; font-size: 1.1em;" onclick="startApp()">🚀 Start Quiz</button>
+
+            <div class="options-grid">
+                <label class="checkbox-card">
+                    <input type="checkbox" id="shuffleQuestions" checked>
+                    Shuffle Questions
+                </label>
+                <label class="checkbox-card">
+                    <input type="checkbox" id="shuffleAnswers" checked>
+                    Shuffle MC Answers
+                </label>
+                <label class="checkbox-card" id="autoSubmitCard">
+                    <input type="checkbox" id="autoSubmitAnswer" checked>
+                    Instant Check on Selection
+                </label>
+            </div>
+
+            <button class="btn btn-primary" onclick="initQuiz()">🚀 Start Session</button>
         </div>
 
         <div class="card">
-            <h3>📊 Past Results</h3>
-            <ul id="history-list" style="padding-left: 20px; color: var(--text-muted);"></ul>
+            <h3 style="margin-top:0;">📈 Recent History</h3>
+            <div id="historyList" style="color: var(--text-muted); font-size: 0.9rem;">No tests completed yet.</div>
         </div>
-    </div>
+    </main>
 
     <!-- QUIZ SCREEN -->
-    <div id="quiz-screen" class="hidden">
-        <div class="card">
-            <div id="progress-container"><div id="progress-bar"></div></div>
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
-                <h2 id="question-text"></h2>
-                <button class="btn-warning btn-small" id="flag-btn" onclick="toggleFlag()">🚩 Flag</button>
-            </div>
-            
-            <div id="options-container" style="margin: 20px 0;"></div>
-            
-            <button class="btn-primary" id="submit-btn" onclick="submitAnswer()">Submit Answer</button>
-            <button class="btn-primary hidden" id="next-btn" onclick="nextQuestion()">Next Question ➡️</button>
+    <main id="quiz-screen" class="hidden">
+        <div class="progress-wrapper">
+            <div class="progress-fill" id="progressBar"></div>
         </div>
-    </div>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 20px;">
+                <span id="questionCounter" style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em;"></span>
+                <button class="btn btn-flag" id="btnFlag" onclick="toggleFlag()">🚩 Flag</button>
+            </div>
+
+            <h2 id="questionTitle" style="margin-top: 0; font-size: 1.25rem;"></h2>
+
+            <div id="interactionArea" style="margin: 20px 0;"></div>
+
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button class="btn btn-primary" id="btnSubmit" onclick="handleSubmitAnswer()">Submit Answer</button>
+                <button class="btn btn-primary hidden" id="btnNext" onclick="handleNextQuestion()">Next Question ➡️</button>
+            </div>
+        </div>
+    </main>
 
     <!-- RESULTS SCREEN -->
-    <div id="results-screen" class="hidden">
+    <main id="results-screen" class="hidden">
         <div class="card">
-            <h1>Results 🎉</h1>
-            <h2 id="final-score" style="color: var(--primary);"></h2>
-            
-            <div class="filters">
-                <button class="btn-outline" onclick="renderResults('all')">All Questions</button>
-                <button class="btn-outline" onclick="renderResults('wrong')">Wrong Only ❌</button>
-                <button class="btn-outline" onclick="renderResults('flagged')">Flagged Only 🚩</button>
+            <h1 style="margin-top: 0;">Session Results</h1>
+            <h2 id="resultsSummary" style="color: var(--primary); font-size: 1.5rem; margin-bottom: 20px;"></h2>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;">
+                <button class="btn btn-secondary btn-sm" onclick="filterResults('all')">All Questions</button>
+                <button class="btn btn-secondary btn-sm" onclick="filterResults('wrong')">Wrong Only ❌</button>
+                <button class="btn btn-secondary btn-sm" onclick="filterResults('flagged')">Flagged Only 🚩</button>
             </div>
-            
-            <div id="results-list" style="margin-top: 20px;"></div>
-            <button class="btn-primary" style="margin-top: 20px;" onclick="location.reload()">🔄 Take Another Test</button>
+
+            <div id="resultsDetails"></div>
+
+            <button class="btn btn-primary" style="margin-top: 20px;" onclick="location.reload()">Start Over</button>
         </div>
-    </div>
+    </main>
 </div>
 
 <script>
-    // --- THEME MANAGEMENT ---
-    const themeSelect = document.getElementById('theme-select');
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    function applyTheme(theme) {
-        if (theme === 'system') {
-            document.documentElement.setAttribute('data-theme', systemPrefersDark.matches ? 'dark' : 'light');
+    /* ==============================
+       THEME CONTROLLER (PILL SLIDER)
+       ============================== */
+    const pillSlider = document.getElementById('pillSlider');
+    const systemMedia = window.matchMedia('(prefers-color-scheme: dark)');
+    let activeTheme = localStorage.getItem('theme-setting') || 'system';
+
+    function setTheme(mode) {
+        activeTheme = mode;
+        localStorage.setItem('theme-setting', mode);
+
+        // Update Slider Position
+        document.querySelectorAll('.pill-switch button').forEach(b => b.classList.remove('active'));
+        if (mode === 'light') {
+            pillSlider.style.transform = 'translateX(0%)';
+            document.getElementById('btnThemeLight').classList.add('active');
+            document.documentElement.setAttribute('data-theme', 'light');
+        } else if (mode === 'system') {
+            pillSlider.style.transform = 'translateX(100%)';
+            document.getElementById('btnThemeSystem').classList.add('active');
+            document.documentElement.setAttribute('data-theme', systemMedia.matches ? 'dark' : 'light');
         } else {
-            document.documentElement.setAttribute('data-theme', theme);
+            pillSlider.style.transform = 'translateX(200%)';
+            document.getElementById('btnThemeDark').classList.add('active');
+            document.documentElement.setAttribute('data-theme', 'dark');
         }
     }
 
-    themeSelect.addEventListener('change', (e) => {
-        localStorage.setItem('preferred-theme', e.target.value);
-        applyTheme(e.target.value);
+    systemMedia.addEventListener('change', () => {
+        if (activeTheme === 'system') setTheme('system');
     });
 
-    systemPrefersDark.addEventListener('change', () => {
-        if (themeSelect.value === 'system') applyTheme('system');
-    });
+    setTheme(activeTheme);
 
-    // Load saved theme on startup
-    const savedTheme = localStorage.getItem('preferred-theme') || 'system';
-    themeSelect.value = savedTheme;
-    applyTheme(savedTheme);
-
-
-    // --- QUIZ LOGIC ---
+    /* ==============================
+       QUIZ STATE & APP LOGIC
+       ============================== */
     let questions = [];
-    let currentMode = 'quiz';
     let currentIndex = 0;
     let userAnswers = [];
-    let flaggedQuestions = new Set();
-    
-    window.onload = () => {
-        const history = JSON.parse(localStorage.getItem('quizHistory')) || [];
-        const historyList = document.getElementById('history-list');
-        if(history.length === 0) historyList.innerHTML = "<li>No past results found.</li>";
-        history.forEach(h => {
-            historyList.innerHTML += `<li style="margin-bottom: 5px;"><strong>${h.date}</strong> | ${h.mode.toUpperCase()} | Score: ${h.score}/${h.total}</li>`;
-        });
-    };
+    let flaggedSet = new Set();
+    let currentMode = 'quiz';
+    let autoSubmitEnabled = true;
+
+    // Load History
+    window.addEventListener('DOMContentLoaded', () => {
+        const history = JSON.parse(localStorage.getItem('quizHistory') || '[]');
+        if (history.length > 0) {
+            document.getElementById('historyList').innerHTML = history.slice(-5).reverse().map(h => `
+                <div style="padding: 6px 0; border-bottom: 1px solid var(--border);">
+                    <strong>${h.date}</strong> — ${h.mode.toUpperCase()} mode: 
+                    <span style="color: var(--primary); font-weight: 600;">${h.score}/${h.total}</span> (${Math.round((h.score/h.total)*100)}%)
+                </div>
+            `).join('');
+        }
+    });
+
+    function toggleAutoSubmitOption() {
+        const mode = document.getElementById('modeSelect').value;
+        const autoSubmitCard = document.getElementById('autoSubmitCard');
+        if (mode === 'exam') {
+            autoSubmitCard.style.opacity = '0.4';
+            autoSubmitCard.style.pointerEvents = 'none';
+        } else {
+            autoSubmitCard.style.opacity = '1';
+            autoSubmitCard.style.pointerEvents = 'auto';
+        }
+    }
 
     function copyPrompt() {
-        const promptText = document.getElementById('llm-prompt').innerText;
-        navigator.clipboard.writeText(promptText).then(() => {
-            alert("Prompt copied to clipboard!");
-        });
+        const text = document.getElementById('llmPrompt').innerText;
+        navigator.clipboard.writeText(text).then(() => alert("Prompt copied to clipboard!"));
     }
 
-    function startApp() {
-        const csvText = document.getElementById('csv-text').value.trim();
-        const fileInput = document.getElementById('file-input').files[0];
-        currentMode = document.getElementById('mode-select').value;
-        
-        if (csvText) {
-            parseData(csvText);
-        } else if (fileInput) {
-            Papa.parse(fileInput, {
-                header: true, skipEmptyLines: true,
-                complete: function(results) { parseData(null, results.data); }
+    // Shuffle Algorithm (Fisher-Yates)
+    function shuffle(arr) {
+        const array = [...arr];
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function initQuiz() {
+        const pasteData = document.getElementById('csvPaste').value.trim();
+        const fileUpload = document.getElementById('fileUpload').files[0];
+        currentMode = document.getElementById('modeSelect').value;
+        autoSubmitEnabled = document.getElementById('autoSubmitAnswer').checked && currentMode === 'quiz';
+
+        if (pasteData) {
+            parseRawCSV(pasteData);
+        } else if (fileUpload) {
+            Papa.parse(fileUpload, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => startEngine(results.data)
             });
         } else {
-            alert("Please paste CSV text or upload a CSV file.");
+            alert("Please paste your CSV questions or upload a CSV file.");
         }
     }
 
-    function parseData(rawText, parsedObj = null) {
-        if (rawText) {
-            const results = Papa.parse(rawText, { header: true, skipEmptyLines: true });
-            questions = results.data;
-        } else {
-            questions = parsedObj;
+    function parseRawCSV(raw) {
+        const parsed = Papa.parse(raw, { header: true, skipEmptyLines: true });
+        startEngine(parsed.data);
+    }
+
+    function startEngine(data) {
+        if (!data || data.length === 0 || !data[0].Question) {
+            alert("Could not find questions in the provided CSV format.");
+            return;
         }
 
-        if(questions.length === 0 || !questions[0].Question) {
-            return alert("Error parsing CSV. Please check your format.");
-        }
-        
+        const shouldShuffleQ = document.getElementById('shuffleQuestions').checked;
+        const shouldShuffleA = document.getElementById('shuffleAnswers').checked;
+
+        // Process questions and clean whitespace
+        questions = data.map(item => {
+            let options = [];
+            if (item.Type === 'MC' && item.Options) {
+                options = item.Options.split('|').map(s => s.trim());
+                if (shouldShuffleA) options = shuffle(options);
+            }
+            return {
+                Question: item.Question.trim(),
+                Type: item.Type.trim().toUpperCase(),
+                Options: options,
+                Answer: item.Answer ? item.Answer.trim() : '',
+                CaseSensitive: item.CaseSensitive ? item.CaseSensitive.trim().toUpperCase() === 'TRUE' : false
+            };
+        });
+
+        if (shouldShuffleQ) questions = shuffle(questions);
+
+        currentIndex = 0;
+        userAnswers = [];
+        flaggedSet.clear();
+
         document.getElementById('setup-screen').classList.add('hidden');
         document.getElementById('quiz-screen').classList.remove('hidden');
-        loadQuestion();
+        renderQuestion();
     }
 
-    function loadQuestion() {
+    function renderQuestion() {
         const q = questions[currentIndex];
-        document.getElementById('question-text').innerText = `${currentIndex + 1}. ${q.Question}`;
-        document.getElementById('progress-bar').style.width = `${((currentIndex) / questions.length) * 100}%`;
-        
-        const optionsContainer = document.getElementById('options-container');
-        optionsContainer.innerHTML = '';
-        
-        const flagBtn = document.getElementById('flag-btn');
-        flagBtn.innerHTML = flaggedQuestions.has(currentIndex) ? "🚩 Unflag" : "🚩 Flag";
+        const area = document.getElementById('interactionArea');
+        area.innerHTML = '';
+
+        document.getElementById('questionCounter').innerText = `Question ${currentIndex + 1} of ${questions.length}`;
+        document.getElementById('questionTitle').innerText = q.Question;
+        document.getElementById('progressBar').style.width = `${(currentIndex / questions.length) * 100}%`;
+
+        // Flag status
+        const btnFlag = document.getElementById('btnFlag');
+        btnFlag.className = flaggedSet.has(currentIndex) ? 'btn btn-flag active' : 'btn btn-flag';
+        btnFlag.innerText = flaggedSet.has(currentIndex) ? '🚩 Flagged' : '🚩 Flag';
 
         if (q.Type === 'MC') {
-            const options = q.Options.split('|');
-            options.forEach((opt) => {
-                optionsContainer.innerHTML += `
-                    <label class="option-label">
-                        <input type="radio" name="mc-option" value="${opt.trim()}" style="margin-right: 10px;"> 
-                        ${opt.trim()}
-                    </label>
-                `;
+            q.Options.forEach(opt => {
+                const label = document.createElement('label');
+                label.className = 'option-choice';
+                label.innerHTML = `<input type="radio" name="mcGroup" value="${opt.replace(/"/g, '&quot;')}"> <span>${opt}</span>`;
+                
+                label.querySelector('input').addEventListener('change', () => {
+                    if (autoSubmitEnabled) handleSubmitAnswer();
+                });
+
+                area.appendChild(label);
             });
-        } else if (q.Type === 'WI') {
-            optionsContainer.innerHTML = `<input type="text" id="wi-input" placeholder="Type your answer here...">`;
+        } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'wiInput';
+            input.placeholder = 'Type your answer here...';
+            input.autocomplete = 'off';
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleSubmitAnswer();
+            });
+            area.appendChild(input);
+            setTimeout(() => input.focus(), 50);
         }
 
-        document.getElementById('submit-btn').classList.remove('hidden');
-        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('btnSubmit').classList.remove('hidden');
+        document.getElementById('btnNext').classList.add('hidden');
     }
 
     function toggleFlag() {
-        if (flaggedQuestions.has(currentIndex)) {
-            flaggedQuestions.delete(currentIndex);
-            document.getElementById('flag-btn').innerHTML = "🚩 Flag";
+        if (flaggedSet.has(currentIndex)) {
+            flaggedSet.delete(currentIndex);
         } else {
-            flaggedQuestions.add(currentIndex);
-            document.getElementById('flag-btn').innerHTML = "🚩 Unflag";
+            flaggedSet.add(currentIndex);
         }
+        const btnFlag = document.getElementById('btnFlag');
+        btnFlag.className = flaggedSet.has(currentIndex) ? 'btn btn-flag active' : 'btn btn-flag';
+        btnFlag.innerText = flaggedSet.has(currentIndex) ? '🚩 Flagged' : '🚩 Flag';
     }
 
-    function submitAnswer() {
+    function handleSubmitAnswer() {
         const q = questions[currentIndex];
-        let userAnswer = '';
-        let isCorrect = false;
+        let userAns = '';
+        let correct = false;
 
         if (q.Type === 'MC') {
-            const selected = document.querySelector('input[name="mc-option"]:checked');
-            if (!selected) return alert("Please select an option.");
-            userAnswer = selected.value;
-            isCorrect = (userAnswer === q.Answer.trim());
-        } else if (q.Type === 'WI') {
-            userAnswer = document.getElementById('wi-input').value.trim();
-            if(!userAnswer) return alert("Please type an answer.");
-            
-            const isCaseSensitive = q.CaseSensitive.toUpperCase() === 'TRUE';
-            const flags = isCaseSensitive ? '' : 'i';
+            const checked = document.querySelector('input[name="mcGroup"]:checked');
+            if (!checked) return alert("Select an option first.");
+            userAns = checked.value;
+            correct = (userAns === q.Answer);
+        } else {
+            const input = document.getElementById('wiInput');
+            userAns = input.value.trim();
+            if (!userAns) return alert("Please type an answer.");
+
             try {
-                const regex = new RegExp(q.Answer, flags);
-                isCorrect = regex.test(userAnswer);
-            } catch (e) {
-                console.error("Invalid Regex in CSV", e);
-                isCorrect = false;
+                const regex = new RegExp(q.Answer, q.CaseSensitive ? '' : 'i');
+                correct = regex.test(userAns);
+            } catch (err) {
+                console.error("Regex validation error:", err);
+                correct = false;
             }
         }
 
-        userAnswers[currentIndex] = { answer: userAnswer, isCorrect: isCorrect };
+        userAnswers[currentIndex] = { answer: userAns, isCorrect: correct };
 
         if (currentMode === 'quiz') {
-            document.getElementById('submit-btn').classList.add('hidden');
-            document.getElementById('next-btn').classList.remove('hidden');
-            
+            // Instant feedback display
+            document.getElementById('btnSubmit').classList.add('hidden');
+            document.getElementById('btnNext').classList.remove('hidden');
+
             if (q.Type === 'MC') {
-                document.querySelectorAll('.option-label').forEach(lbl => {
-                    const input = lbl.querySelector('input');
-                    input.disabled = true;
-                    if (input.value === q.Answer.trim()) lbl.classList.add('correct-bg');
-                    else if (input.value === userAnswer && !isCorrect) lbl.classList.add('wrong-bg');
+                document.querySelectorAll('.option-choice').forEach(lbl => {
+                    lbl.classList.add('disabled');
+                    const inp = lbl.querySelector('input');
+                    inp.disabled = true;
+
+                    if (inp.value === q.Answer) lbl.classList.add('correct');
+                    if (inp.value === userAns && !correct) lbl.classList.add('wrong');
                 });
             } else {
-                const inputField = document.getElementById('wi-input');
-                inputField.disabled = true;
-                if (isCorrect) inputField.classList.add('correct-bg');
-                else {
-                    inputField.classList.add('wrong-bg');
-                    document.getElementById('options-container').innerHTML += `<p style="color: var(--danger); margin-top: 10px;">Expected pattern: <code>${q.Answer}</code></p>`;
-                }
+                const input = document.getElementById('wiInput');
+                input.disabled = true;
+                input.style.borderColor = correct ? 'var(--success)' : 'var(--danger)';
+                
+                const note = document.createElement('div');
+                note.style.marginTop = '10px';
+                note.style.fontSize = '0.9rem';
+                note.innerHTML = correct 
+                    ? `<span style="color: var(--success); font-weight: 600;">Correct!</span>` 
+                    : `<span style="color: var(--danger); font-weight: 600;">Incorrect.</span> Target Pattern: <code>${q.Answer}</code>`;
+                document.getElementById('interactionArea').appendChild(note);
             }
         } else {
-            nextQuestion();
+            handleNextQuestion();
         }
     }
 
-    function nextQuestion() {
+    function handleNextQuestion() {
         currentIndex++;
-        if (currentIndex >= questions.length) {
-            document.getElementById('progress-bar').style.width = `100%`;
-            finishTest();
+        if (currentIndex < questions.length) {
+            renderQuestion();
         } else {
-            loadQuestion();
+            document.getElementById('progressBar').style.width = '100%';
+            displaySummary();
         }
     }
 
-    function finishTest() {
+    function displaySummary() {
         document.getElementById('quiz-screen').classList.add('hidden');
         document.getElementById('results-screen').classList.remove('hidden');
-        
-        const correctCount = userAnswers.filter(a => a.isCorrect).length;
-        document.getElementById('final-score').innerText = `Score: ${correctCount} Correct / ${questions.length - correctCount} Wrong`;
 
-        const history = JSON.parse(localStorage.getItem('quizHistory')) || [];
-        history.push({ date: new Date().toLocaleDateString(), mode: currentMode, score: correctCount, total: questions.length });
+        const totalCorrect = userAnswers.filter(a => a && a.isCorrect).length;
+        document.getElementById('resultsSummary').innerText = `${totalCorrect} / ${questions.length} Correct (${Math.round((totalCorrect/questions.length)*100)}%)`;
+
+        // Save history
+        const history = JSON.parse(localStorage.getItem('quizHistory') || '[]');
+        history.push({
+            date: new Date().toLocaleDateString(),
+            mode: currentMode,
+            score: totalCorrect,
+            total: questions.length
+        });
         localStorage.setItem('quizHistory', JSON.stringify(history));
 
-        renderResults('all');
+        filterResults('all');
     }
 
-    function renderResults(filter) {
-        const list = document.getElementById('results-list');
-        list.innerHTML = '';
+    function filterResults(type) {
+        const details = document.getElementById('resultsDetails');
+        details.innerHTML = '';
 
-        questions.forEach((q, i) => {
-            const ans = userAnswers[i];
-            const isFlagged = flaggedQuestions.has(i);
-            
-            if (filter === 'wrong' && ans.isCorrect) return;
-            if (filter === 'flagged' && !isFlagged) return;
+        questions.forEach((q, idx) => {
+            const ans = userAnswers[idx] || { answer: 'Unanswered', isCorrect: false };
+            const isFlagged = flaggedSet.has(idx);
 
-            const statusClass = ans.isCorrect ? 'correct' : 'wrong';
-            const flagHTML = isFlagged ? `<span style="float:right; font-size: 1.2em;" title="Flagged">🚩</span>` : '';
-            
-            let displayAnswer = q.Answer;
-            if(q.Type === 'WI') displayAnswer = `Regex: <code>${q.Answer}</code> (Case Sensitive: ${q.CaseSensitive})`;
+            if (type === 'wrong' && ans.isCorrect) return;
+            if (type === 'flagged' && !isFlagged) return;
 
-            list.innerHTML += `
-                <div class="result-item ${statusClass} ${isFlagged ? 'flagged' : ''}">
-                    ${flagHTML}
-                    <p style="margin-top:0;"><strong>Q${i+1}:</strong> ${q.Question}</p>
-                    <p><strong>Your Answer:</strong> <span style="color: ${ans.isCorrect ? 'var(--success)' : 'var(--danger)'}">${ans.answer}</span> ${ans.isCorrect ? '✅' : '❌'}</p>
-                    ${!ans.isCorrect ? `<p style="margin-bottom:0;"><strong>Correct/Expected:</strong> ${displayAnswer}</p>` : ''}
+            const div = document.createElement('div');
+            div.className = `result-row ${ans.isCorrect ? 'correct' : 'wrong'} ${isFlagged ? 'flagged' : ''}`;
+            div.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 6px;">
+                    ${idx + 1}. ${q.Question} ${isFlagged ? '<span style="color: var(--warning);">🚩</span>' : ''}
                 </div>
+                <div style="font-size: 0.9rem;">Your Answer: <strong>${ans.answer}</strong> ${ans.isCorrect ? '✅' : '❌'}</div>
+                ${!ans.isCorrect ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Correct / Expected: <code>${q.Answer}</code></div>` : ''}
             `;
+            details.appendChild(div);
         });
     }
 </script>
