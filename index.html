@@ -91,6 +91,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
         }
         .brand {
             font-size: 1.5rem;
@@ -404,7 +406,7 @@
             font-size: 0.72rem;
             font-family: monospace;
             color: var(--text-muted);
-            opacity: 0.35;
+            opacity: 0.4;
             pointer-events: none;
             user-select: none;
             z-index: 999;
@@ -421,11 +423,14 @@
     <!-- Header -->
     <header class="header">
         <h1 class="brand" onclick="handleBrandClick()">⚡ QuizPrep</h1>
-        <div class="pill-switch">
-            <div class="pill-slider" id="pillSlider"></div>
-            <button id="btnThemeLight" aria-label="Light mode" onclick="setTheme('light')">Light</button>
-            <button id="btnThemeSystem" aria-label="System mode" onclick="setTheme('system')">Auto</button>
-            <button id="btnThemeDark" aria-label="Dark mode" onclick="setTheme('dark')">Dark</button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" onclick="exportDebugLogs()" title="Copy diagnostics for troubleshooting">📋 Copy Debug Logs</button>
+            <div class="pill-switch">
+                <div class="pill-slider" id="pillSlider"></div>
+                <button id="btnThemeLight" aria-label="Light mode" onclick="setTheme('light')">Light</button>
+                <button id="btnThemeSystem" aria-label="System mode" onclick="setTheme('system')">Auto</button>
+                <button id="btnThemeDark" aria-label="Dark mode" onclick="setTheme('dark')">Dark</button>
+            </div>
         </div>
     </header>
 
@@ -440,12 +445,13 @@
 Question,Type,Options,Answer,CaseSensitive,Explanation
 
 Rules:
-1. Wrap any field containing commas or double quotes in double quotes. Never use the pipe (|) character inside question text or explanations.
-2. Type must be 'MC' (Single Choice), 'MS' (Multi-Select / choose all that apply), or 'WI' (Write-in).
-3. For MC: 'Options' separated by (|). 'Answer' must match one single choice exactly. CaseSensitive is FALSE.
-4. For MS: 'Options' separated by (|). 'Answer' must be all correct choices separated by (|) (e.g. Choice A|Choice C). CaseSensitive is FALSE.
-5. For WI: 'Options' is left empty. 'Answer' must be a Regex pattern (e.g. ^42$ or ^Paris$). CaseSensitive must be TRUE or FALSE.
-6. 'Explanation' should concisely explain why the answer is correct.
+1. Always wrap fields in double quotes if they contain commas, quotes, or newlines.
+2. Type must be 'MC' (Single Choice), 'MS' (Multi-Select), or 'WI' (Write-in).
+3. For MC and MS: 'Options' MUST contain at least 4 choices separated ONLY by the pipe character (|). Never use commas to separate options.
+4. For MC: 'Answer' must match one single option verbatim.
+5. For MS: 'Answer' must be all correct choices separated by the pipe (|) character (e.g. Choice A|Choice C).
+6. For WI: 'Options' must be left completely empty. 'Answer' must be a Regex pattern (e.g. ^42$ or ^Paris$).
+7. 'Explanation' should concisely explain why the answer is correct.
 
 Here is the material:
 [PASTE NOTES HERE]</textarea>
@@ -576,9 +582,43 @@ Here is the material:
 <div id="toastContainer"></div>
 
 <!-- Faint Corner Version Indicator -->
-<div class="version-badge">v1.3.3</div>
+<div class="version-badge">v1.3.4</div>
 
 <script>
+    /* ==============================
+       DEBUG LOGGING FACILITY
+       ============================== */
+    const debugLogs = [];
+    function logDebug(message, data = null) {
+        const time = new Date().toISOString().split('T')[1].slice(0, 8);
+        const entry = `[${time}] ${message}` + (data ? ` | ${typeof data === 'object' ? JSON.stringify(data) : data}` : '');
+        debugLogs.push(entry);
+        if (debugLogs.length > 300) debugLogs.shift();
+        console.log(entry);
+    }
+
+    function exportDebugLogs() {
+        const report = [
+            `--- QUIZPREP DEBUG REPORT (v1.3.4) ---`,
+            `Time: ${new Date().toLocaleString()}`,
+            `User Agent: ${navigator.userAgent}`,
+            `Total Raw Questions Loaded: ${rawLoadedQuestions.length}`,
+            `Active Deck Length: ${currentQuestions.length}`,
+            `Current Index: ${currentIndex}`,
+            `Current Mode: ${currentMode}`,
+            `\n--- RECENT DECK SAMPLE (First 5 Questions) ---`,
+            JSON.stringify(currentQuestions.slice(0, 5), null, 2),
+            `\n--- RECENT SYSTEM LOGS ---`,
+            ...debugLogs.slice(-40)
+        ].join('\n');
+
+        navigator.clipboard.writeText(report).then(() => {
+            showToast("Debug logs copied to clipboard!");
+        }).catch(() => {
+            alert("Could not access clipboard. Log contents:\n" + report.slice(0, 400));
+        });
+    }
+
     /* ==============================
        SECURITY & SANITIZATION
        ============================== */
@@ -603,7 +643,7 @@ Here is the material:
 
         const a = (answerRaw || '').trim();
         if (a.includes('|')) return true;
-        if ((a.includes(',') || a.includes(';') || /\s+and\s+/i.test(a)) && !a.startsWith('^') && !a.endsWith('$')) {
+        if ((a.includes(';') || /\s+and\s+/i.test(a)) && !a.startsWith('^') && !a.endsWith('$')) {
             return true;
         }
 
@@ -618,7 +658,9 @@ Here is the material:
         } else if (ansStr.includes(';')) {
             rawList = ansStr.split(';');
         } else if (ansStr.includes(',')) {
-            rawList = ansStr.split(',');
+            // Only split by comma if comma is NOT part of a single choice option
+            const isSingleOpt = options.some(o => o.trim().toLowerCase() === ansStr.trim().toLowerCase());
+            rawList = isSingleOpt ? [ansStr] : ansStr.split(',');
         } else if (/\s+and\s+/i.test(ansStr)) {
             rawList = ansStr.split(/\s+and\s+/i);
         } else {
@@ -662,7 +704,7 @@ Here is the material:
         setTimeout(() => toast.classList.add('show'), 10);
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => toast.remove(), 3200);
         }, 3200);
     }
 
@@ -782,8 +824,10 @@ Here is the material:
         pasteData = pasteData.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
 
         if (pasteData) {
+            logDebug("Parsing direct CSV text input");
             parseCSVData(pasteData);
         } else if (fileUpload) {
+            logDebug("Parsing uploaded file", fileUpload.name);
             Papa.parse(fileUpload, {
                 header: true,
                 skipEmptyLines: true,
@@ -805,9 +849,11 @@ Here is the material:
     }
 
     function handleParseResult(parsed) {
+        logDebug("PapaParse completed", { rows: parsed.data?.length, errors: parsed.errors?.length });
         if (parsed.errors && parsed.errors.length > 0) {
+            parsed.errors.forEach(err => logDebug("Parse error", err));
             const firstErr = parsed.errors[0];
-            showToast(`CSV Warning on row ${firstErr.row + 1}: ${firstErr.message}`);
+            showToast(`CSV warning on row ${firstErr.row + 1}: ${firstErr.message}`);
         }
 
         const data = parsed.data;
@@ -817,7 +863,7 @@ Here is the material:
         }
 
         const validated = [];
-        data.forEach((row) => {
+        data.forEach((row, rowIdx) => {
             const rowKeys = Object.keys(row);
             const findKey = (name) => rowKeys.find(k => k.toLowerCase() === name.toLowerCase());
 
@@ -830,21 +876,35 @@ Here is the material:
 
             const question = row[qKey]?.trim();
             let rawType = (row[tKey] || '').trim().toUpperCase();
+            const rawOptions = (row[oKey] || '').trim();
             const answerRaw = (row[aKey] || '').trim();
 
             if (!question) return;
 
+            // Split options using pipe
+            let options = [];
+            if (rawOptions) {
+                options = rawOptions.split('|').map(s => s.trim()).filter(Boolean);
+                // Recovery: if delimiter was accidentally a semicolon or newline
+                if (options.length <= 1 && rawOptions.includes(';')) {
+                    options = rawOptions.split(';').map(s => s.trim()).filter(Boolean);
+                }
+            }
+
+            // Recovery: If marked as MC/MS but has fewer than 2 choices, fallback to Write-In so it doesn't give away the answer
+            if ((rawType === 'MC' || rawType === 'MS') && options.length <= 1) {
+                logDebug(`Row ${rowIdx + 1}: Missing options for choice question. Falling back to WI.`, { question, options, answer: answerRaw });
+                rawType = 'WI';
+                options = [];
+            }
+
+            // Intelligent Multi-Select check
             if (rawType !== 'WI') {
                 if (detectIsMultiSelect(rawType, question, answerRaw)) {
                     rawType = 'MS';
                 } else if (!rawType) {
                     rawType = 'MC';
                 }
-            }
-
-            let options = [];
-            if ((rawType === 'MC' || rawType === 'MS') && row[oKey]) {
-                options = row[oKey].split('|').map(s => s.trim()).filter(Boolean);
             }
 
             validated.push({
@@ -856,6 +916,8 @@ Here is the material:
                 Explanation: (row[eKey] || '').trim()
             });
         });
+
+        logDebug(`Validated deck constructed with ${validated.length} questions`);
 
         if (validated.length === 0) {
             showToast("No valid questions found. Check CSV structure.");
@@ -1359,7 +1421,6 @@ Here is the material:
     window.addEventListener('keydown', (e) => {
         const active = document.activeElement;
         const tag = active ? active.tagName.toLowerCase() : '';
-        // If actively typing in a non-disabled input/textarea, let that element handle keystrokes
         const isActivelyTyping = tag === 'textarea' || (tag === 'input' && !active.disabled);
 
         if (isActivelyTyping) {
