@@ -2,7 +2,7 @@
 
 A clean, modern, and privacy-first web application for practicing quizzes and simulating exams. Turn study notes, documentation, or textbooks into interactive tests in seconds.
 
-> **Note:** This entire application is proudly **vibecoded** — sculpted end-to-end through iterative prompts and conversational coding with AI. Zero boilerplate bloat, pure functional vibes.
+> **Note:** This entire application is **vibecoded** — sculpted end-to-end through iterative prompts and conversational coding with AI. Zero boilerplate bloat, pure functional vibes.
 
 ---
 
