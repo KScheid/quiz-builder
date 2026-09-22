@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz & Exam Prep</title>
+    <!-- PapaParse for parsing CSV files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; --warning: #ffc107; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+        
+        /* Progress Bar */
+        #progress-container { width: 100%; background: #e9ecef; border-radius: 5px; height: 10px; margin-bottom: 20px; overflow: hidden; }
+        #progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+        
+        /* Buttons & Inputs */
+        button { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; color: white; font-size: 16px; margin-top: 10px; }
+        .btn-primary { background: var(--primary); }
+        .btn-warning { background: var(--warning); color: black; }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        input[type="file"], select, input[type="text"] { margin: 10px 0; padding: 10px; width: 100%; box-sizing: border-box; }
+        
+        /* Quiz Elements */
+        .option-label { display: block; padding: 10px; background: #f8f9fa; margin: 5px 0; border-radius: 5px; cursor: pointer; border: 1px solid #ddd; }
+        .option-label:hover { background: #e2e6ea; }
+        .correct-bg { background: #d4edda !important; border-color: var(--success); }
+        .wrong-bg { background: #f8d7da !important; border-color: var(--danger); }
+        
+        /* Results */
+        .result-item { padding: 15px; margin-bottom: 10px; border-left: 5px solid #ccc; background: #f9f9f9; }
+        .result-item.correct { border-color: var(--success); }
+        .result-item.wrong { border-color: var(--danger); }
+        .result-item.flagged { border-right: 5px solid var(--warning); }
+        .filters button { margin-right: 5px; }
+
+        /* History */
+        #history-list { list-style: none; padding: 0; }
+        #history-list li { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- SETUP SCREEN -->
+    <div id="setup-screen">
+        <h1>Quiz & Exam App</h1>
+        <label>1. Upload Quiz CSV:</label>
+        <input type="file" id="file-input" accept=".csv">
+        
+        <label>2. Select Mode:</label>
+        <select id="mode-select">
+            <option value="quiz">Quiz Mode (Immediate Feedback)</option>
+            <option value="exam">Exam Mode (Feedback at the end)</option>
+        </select>
+        
+        <button class="btn-primary" onclick="startApp()">Start</button>
+
+        <hr style="margin: 30px 0;">
+        <h3>Past Results</h3>
+        <ul id="history-list"></ul>
+    </div>
+
+    <!-- QUIZ SCREEN -->
+    <div id="quiz-screen" class="hidden">
+        <div id="progress-container"><div id="progress-bar"></div></div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="question-text"></h3>
+            <button class="btn-warning" id="flag-btn" onclick="toggleFlag()">🚩 Flag</button>
+        </div>
+        
+        <div id="options-container"></div>
+        
+        <button class="btn-primary" id="submit-btn" onclick="submitAnswer()">Submit Answer</button>
+        <button class="btn-primary hidden" id="next-btn" onclick="nextQuestion()">Next Question</button>
+    </div>
+
+    <!-- RESULTS SCREEN -->
+    <div id="results-screen" class="hidden">
+        <h1>Results</h1>
+        <h2 id="final-score"></h2>
+        
+        <div class="filters">
+            <button class="btn-outline" onclick="renderResults('all')">All Questions</button>
+            <button class="btn-outline" onclick="renderResults('wrong')">Wrong Only</button>
+            <button class="btn-outline" onclick="renderResults('flagged')">Flagged Only</button>
+        </div>
+        
+        <div id="results-list" style="margin-top: 20px;"></div>
+        <button class="btn-primary" onclick="location.reload()">Take Another Test</button>
+    </div>
+</div>
+
+<script>
+    let questions = [];
+    let currentMode = 'quiz';
+    let currentIndex = 0;
+    let userAnswers = [];
+    let flaggedQuestions = new Set();
+    
+    // Load history on startup
+    window.onload = () => {
+        const history = JSON.parse(localStorage.getItem('quizHistory')) || [];
+        const historyList = document.getElementById('history-list');
+        if(history.length === 0) historyList.innerHTML = "<li>No past results found.</li>";
+        history.forEach(h => {
+            historyList.innerHTML += `<li>Date: ${h.date} | Mode: ${h.mode} | Score: ${h.score}/${h.total}</li>`;
+        });
+    };
+
+    function startApp() {
+        const fileInput = document.getElementById('file-input').files[0];
+        currentMode = document.getElementById('mode-select').value;
+        
+        if (!fileInput) {
+            alert("Please upload a CSV file.");
+            return;
+        }
+
+        Papa.parse(fileInput, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                questions = results.data;
+                if(questions.length === 0) return alert("Empty or invalid CSV!");
+                
+                document.getElementById('setup-screen').classList.add('hidden');
+                document.getElementById('quiz-screen').classList.remove('hidden');
+                loadQuestion();
+            }
+        });
+    }
+
+    function loadQuestion() {
+        const q = questions[currentIndex];
+        document.getElementById('question-text').innerText = `${currentIndex + 1}. ${q.Question}`;
+        document.getElementById('progress-bar').style.width = `${((currentIndex) / questions.length) * 100}%`;
+        
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+        
+        // Update Flag button state
+        const flagBtn = document.getElementById('flag-btn');
+        flagBtn.innerText = flaggedQuestions.has(currentIndex) ? "🚩 Unflag" : "🚩 Flag";
+
+        if (q.Type === 'MC') {
+            const options = q.Options.split('|');
+            options.forEach((opt, index) => {
+                optionsContainer.innerHTML += `
+                    <label class="option-label">
+                        <input type="radio" name="mc-option" value="${opt}"> ${opt}
+                    </label>
+                `;
+            });
+        } else if (q.Type === 'WI') {
+            optionsContainer.innerHTML = `<input type="text" id="wi-input" placeholder="Type your answer here...">`;
+        }
+
+        document.getElementById('submit-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+    }
+
+    function toggleFlag() {
+        if (flaggedQuestions.has(currentIndex)) {
+            flaggedQuestions.delete(currentIndex);
+            document.getElementById('flag-btn').innerText = "🚩 Flag";
+        } else {
+            flaggedQuestions.add(currentIndex);
+            document.getElementById('flag-btn').innerText = "🚩 Unflag";
+        }
+    }
+
+    function submitAnswer() {
+        const q = questions[currentIndex];
+        let userAnswer = '';
+        let isCorrect = false;
+
+        if (q.Type === 'MC') {
+            const selected = document.querySelector('input[name="mc-option"]:checked');
+            if (!selected) return alert("Please select an option.");
+            userAnswer = selected.value;
+            isCorrect = (userAnswer === q.Answer);
+        } else if (q.Type === 'WI') {
+            userAnswer = document.getElementById('wi-input').value.trim();
+            if(!userAnswer) return alert("Please type an answer.");
+            
+            // Regex validation
+            const isCaseSensitive = q.CaseSensitive.toUpperCase() === 'TRUE';
+            const flags = isCaseSensitive ? '' : 'i';
+            try {
+                const regex = new RegExp(q.Answer, flags);
+                isCorrect = regex.test(userAnswer);
+            } catch (e) {
+                console.error("Invalid Regex in CSV", e);
+                isCorrect = false;
+            }
+        }
+
+        // Save answer
+        userAnswers[currentIndex] = { answer: userAnswer, isCorrect: isCorrect };
+
+        if (currentMode === 'quiz') {
+            // Immediate feedback
+            document.getElementById('submit-btn').classList.add('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+            
+            if (q.Type === 'MC') {
+                document.querySelectorAll('.option-label').forEach(lbl => {
+                    const input = lbl.querySelector('input');
+                    input.disabled = true;
+                    if (input.value === q.Answer) lbl.classList.add('correct-bg');
+                    else if (input.value === userAnswer && !isCorrect) lbl.classList.add('wrong-bg');
+                });
+            } else {
+                const inputField = document.getElementById('wi-input');
+                inputField.disabled = true;
+                if (isCorrect) inputField.classList.add('correct-bg');
+                else {
+                    inputField.classList.add('wrong-bg');
+                    document.getElementById('options-container').innerHTML += `<p style="color:red">Expected pattern: ${q.Answer}</p>`;
+                }
+            }
+        } else {
+            // Exam mode: move straight to next
+            nextQuestion();
+        }
+    }
+
+    function nextQuestion() {
+        currentIndex++;
+        if (currentIndex >= questions.length) {
+            document.getElementById('progress-bar').style.width = `100%`;
+            finishTest();
+        } else {
+            loadQuestion();
+        }
+    }
+
+    function finishTest() {
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('results-screen').classList.remove('hidden');
+        
+        const correctCount = userAnswers.filter(a => a.isCorrect).length;
+        document.getElementById('final-score').innerText = `Score: ${correctCount} Correct / ${questions.length - correctCount} Wrong`;
+
+        // Save to local storage
+        const history = JSON.parse(localStorage.getItem('quizHistory')) || [];
+        history.push({
+            date: new Date().toLocaleString(),
+            mode: currentMode,
+            score: correctCount,
+            total: questions.length
+        });
+        localStorage.setItem('quizHistory', JSON.stringify(history));
+
+        renderResults('all');
+    }
+
+    function renderResults(filter) {
+        const list = document.getElementById('results-list');
+        list.innerHTML = '';
+
+        questions.forEach((q, i) => {
+            const ans = userAnswers[i];
+            const isFlagged = flaggedQuestions.has(i);
+            
+            if (filter === 'wrong' && ans.isCorrect) return;
+            if (filter === 'flagged' && !isFlagged) return;
+
+            const statusClass = ans.isCorrect ? 'correct' : 'wrong';
+            const flagHTML = isFlagged ? `<span style="color:orange; float:right;">🚩 Flagged</span>` : '';
+            
+            let displayAnswer = q.Answer;
+            if(q.Type === 'WI') displayAnswer = `Regex Pattern: ${q.Answer} (Case Sensitive: ${q.CaseSensitive})`;
+
+            list.innerHTML += `
+                <div class="result-item ${statusClass} ${isFlagged ? 'flagged' : ''}">
+                    ${flagHTML}
+                    <p><strong>Q${i+1}:</strong> ${q.Question}</p>
+                    <p><strong>Your Answer:</strong> ${ans.answer} ${ans.isCorrect ? '✅' : '❌'}</p>
+                    ${!ans.isCorrect ? `<p><strong>Correct/Expected:</strong> ${displayAnswer}</p>` : ''}
+                </div>
+            `;
+        });
+    }
+</script>
+
+</body>
+</html>
