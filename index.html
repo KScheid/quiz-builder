@@ -391,6 +391,21 @@
         }
         .toast.show { opacity: 1; transform: translateY(0); }
 
+        /* Faint Version Badge in the Corner */
+        .version-badge {
+            position: fixed;
+            bottom: 6px;
+            left: 10px;
+            font-size: 0.72rem;
+            font-family: monospace;
+            color: var(--text-muted);
+            opacity: 0.35;
+            pointer-events: none;
+            user-select: none;
+            z-index: 999;
+            letter-spacing: 0.04em;
+        }
+
         .hidden { display: none !important; }
         hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
     </style>
@@ -555,6 +570,9 @@ Here is the material:
 <!-- Toast Container -->
 <div id="toastContainer"></div>
 
+<!-- Faint Corner Version Indicator -->
+<div class="version-badge">v1.3.0</div>
+
 <script>
     /* ==============================
        SECURITY & SANITIZATION
@@ -697,7 +715,6 @@ Here is the material:
         currentMode = document.getElementById('modeSelect').value;
         autoSubmitEnabled = document.getElementById('autoSubmitAnswer').checked && currentMode === 'quiz';
 
-        // Strip markdown code fences if present
         pasteData = pasteData.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
 
         if (pasteData) {
@@ -753,7 +770,6 @@ Here is the material:
 
             if (!question || !rawType) return;
 
-            // Auto-detect Multi-Select if Answer contains multiple pipe choices or Type is MS
             const isMultiAnswer = answerRaw.includes('|');
             if (rawType === 'MS' || (rawType === 'MC' && isMultiAnswer)) {
                 rawType = 'MS';
@@ -889,7 +905,6 @@ Here is the material:
 
                 label.querySelector('input').addEventListener('change', () => {
                     if (currentMode === 'quiz') {
-                        // Single-choice can auto-submit if enabled; multi-choice requires manual submit button
                         if (!isMulti && autoSubmitEnabled) {
                             handleSubmitAnswer();
                         }
@@ -1078,7 +1093,7 @@ Here is the material:
                 } else if (isChecked && !isExpected) {
                     lbl.classList.add('wrong');
                 } else if (!isChecked && isExpected) {
-                    lbl.classList.add('missed'); // Show user what they missed
+                    lbl.classList.add('missed');
                 }
             });
         } else {
