@@ -229,18 +229,23 @@
         .btn-flag.active { background: var(--flag-active-bg); color: var(--flag-active-text); border-color: var(--flag-active-border); }
         .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
 
-        /* Badge */
+        /* Badges */
         .badge {
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.78rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             background: var(--primary-light);
             color: var(--primary);
             margin-bottom: 8px;
+        }
+        .badge-multi {
+            background: rgba(245, 158, 11, 0.15);
+            color: #d97706;
+            border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
         /* Question Navigation Drawer (Exam Mode) */
@@ -319,7 +324,7 @@
             background: var(--primary-light);
             transform: translateY(-1px);
         }
-        .option-choice input { margin-right: 14px; accent-color: var(--primary); cursor: pointer; }
+        .option-choice input { margin-right: 14px; accent-color: var(--primary); cursor: pointer; width: 18px; height: 18px; flex-shrink: 0; }
         .option-choice.correct {
             background: var(--correct-bg) !important;
             border-color: var(--correct-border) !important;
@@ -439,7 +444,7 @@ Rules:
 2. Type must be 'MC' (Single Choice), 'MS' (Multi-Select / choose all that apply), or 'WI' (Write-in).
 3. For MC: 'Options' separated by (|). 'Answer' must match one single choice exactly. CaseSensitive is FALSE.
 4. For MS: 'Options' separated by (|). 'Answer' must be all correct choices separated by (|) (e.g. Choice A|Choice C). CaseSensitive is FALSE.
-5. For WI: 'Options' is left empty. 'Answer' must be a Regex pattern (e.g. ^42$ or ^Paris$). 'CaseSensitive' must be TRUE or FALSE.
+5. For WI: 'Options' is left empty. 'Answer' must be a Regex pattern (e.g. ^42$ or ^Paris$). CaseSensitive must be TRUE or FALSE.
 6. 'Explanation' should concisely explain why the answer is correct.
 
 Here is the material:
@@ -571,7 +576,7 @@ Here is the material:
 <div id="toastContainer"></div>
 
 <!-- Faint Corner Version Indicator -->
-<div class="version-badge">v1.3.0</div>
+<div class="version-badge">v1.3.2</div>
 
 <script>
     /* ==============================
@@ -584,6 +589,68 @@ Here is the material:
     const cleanDisplayPattern = (pattern) => {
         return String(pattern || '').replace(/^\^/, '').replace(/\$$/, '');
     };
+
+    /* ==============================
+       MULTI-SELECT DETECTION & HELPERS
+       ============================== */
+    function detectIsMultiSelect(rawType, questionText, answerRaw) {
+        const t = (rawType || '').trim().toUpperCase();
+        if (t === 'MS' || t === 'MR' || t === 'MULTI') return true;
+
+        const q = (questionText || '').toLowerCase();
+        // Regex matches "choose two", "choose 2", "select two", "which two", "select all that apply", etc.
+        const multiPattern = /\b(?:choose|select|pick|identify|check)\s+(?:two|three|four|five|2|3|4|5|both|all)\b|\bwhich\s+(?:two|three|four|five|2|3|4|5)\b|\b(?:all|both)\s+that\s+apply\b|\bmultiple\s+(?:answers|choices|options)\b|\([a-z\s]*(?:choose|select)\s+[0-9a-z\s]+\)/i;
+        if (multiPattern.test(q)) return true;
+
+        const a = (answerRaw || '').trim();
+        if (a.includes('|')) return true;
+        if ((a.includes(',') || a.includes(';') || /\s+and\s+/i.test(a)) && !a.startsWith('^') && !a.endsWith('$')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function extractExpectedAnswers(ansStr, options = []) {
+        if (!ansStr) return [];
+        let rawList = [];
+        if (ansStr.includes('|')) {
+            rawList = ansStr.split('|');
+        } else if (ansStr.includes(';')) {
+            rawList = ansStr.split(';');
+        } else if (ansStr.includes(',')) {
+            rawList = ansStr.split(',');
+        } else if (/\s+and\s+/i.test(ansStr)) {
+            rawList = ansStr.split(/\s+and\s+/i);
+        } else {
+            rawList = [ansStr];
+        }
+        return rawList.map(s => s.trim()).filter(Boolean);
+    }
+
+    // Smart option matcher: matches verbatim, or matches "A" to "A. Option Text", etc.
+    function isOptionMatch(optText, optIndex, expText) {
+        const cleanOpt = optText.trim().toLowerCase();
+        const cleanExp = expText.trim().toLowerCase();
+
+        if (cleanOpt === cleanExp) return true;
+
+        const letter = String.fromCharCode(65 + optIndex).toLowerCase();
+        if (cleanExp === letter || cleanExp === `${letter}.` || cleanExp === `${letter})`) return true;
+
+        const prefixMatch = cleanOpt.match(/^[a-z][\.\)\:\-\s]\s*(.*)$/i);
+        if (prefixMatch) {
+            const strippedOpt = prefixMatch[1].trim();
+            if (cleanExp === letter || cleanExp === strippedOpt) return true;
+        }
+
+        const expPrefixMatch = cleanExp.match(/^[a-z][\.\)\:\-\s]\s*(.*)$/i);
+        if (expPrefixMatch) {
+            if (expPrefixMatch[1].trim() === cleanOpt) return true;
+        }
+
+        return false;
+    }
 
     /* ==============================
        TOAST NOTIFICATIONS
@@ -768,11 +835,15 @@ Here is the material:
             let rawType = (row[tKey] || '').trim().toUpperCase();
             const answerRaw = (row[aKey] || '').trim();
 
-            if (!question || !rawType) return;
+            if (!question) return;
 
-            const isMultiAnswer = answerRaw.includes('|');
-            if (rawType === 'MS' || (rawType === 'MC' && isMultiAnswer)) {
-                rawType = 'MS';
+            // Intelligent Multi-Select Conversion
+            if (rawType !== 'WI') {
+                if (detectIsMultiSelect(rawType, question, answerRaw)) {
+                    rawType = 'MS';
+                } else if (!rawType) {
+                    rawType = 'MC';
+                }
             }
 
             let options = [];
@@ -791,7 +862,7 @@ Here is the material:
         });
 
         if (validated.length === 0) {
-            showToast("No valid questions found. Check CSV header structure.");
+            showToast("No valid questions found. Check CSV structure.");
             return;
         }
 
@@ -861,438 +932,3 @@ Here is the material:
         const feedback = document.getElementById('feedbackArea');
         area.innerHTML = '';
         feedback.innerHTML = '';
-
-        document.getElementById('questionCounter').innerText = `Question ${currentIndex + 1} of ${currentQuestions.length}`;
-        document.getElementById('questionTitle').innerText = q.Question;
-        document.getElementById('progressBar').style.width = `${((currentIndex) / currentQuestions.length) * 100}%`;
-
-        // Type Badge
-        const typeBadge = document.getElementById('typeBadge');
-        if (q.Type === 'MS') {
-            const count = q.Answer.split('|').length;
-            typeBadge.innerText = `Multi-Select (Choose ${count})`;
-        } else if (q.Type === 'MC') {
-            typeBadge.innerText = 'Multiple Choice';
-        } else {
-            typeBadge.innerText = 'Write-In';
-        }
-
-        // Flag status
-        const btnFlag = document.getElementById('btnFlag');
-        const isFlagged = flaggedSet.has(currentIndex);
-        btnFlag.className = isFlagged ? 'btn btn-flag active' : 'btn btn-flag';
-        btnFlag.innerText = isFlagged ? '🚩 Flagged (F)' : '🚩 Flag (F)';
-
-        const existingAnswer = userAnswers[currentIndex];
-
-        if (q.Type === 'MC' || q.Type === 'MS') {
-            const isMulti = q.Type === 'MS';
-            const selectedList = existingAnswer ? existingAnswer.answer.split(' | ') : [];
-
-            q.Options.forEach((opt, idx) => {
-                const label = document.createElement('label');
-                label.className = 'option-choice';
-                const isSelected = selectedList.includes(opt);
-                const inputType = isMulti ? 'checkbox' : 'radio';
-                const inputName = isMulti ? 'msGroup' : 'mcGroup';
-                
-                label.innerHTML = `
-                    <input type="${inputType}" name="${inputName}" value="" style="margin-right: 14px;" ${isSelected ? 'checked' : ''}>
-                    <span><strong style="color: var(--text-muted); margin-right: 6px;">${idx + 1}.</strong> ${esc(opt)}</span>
-                `;
-
-                label.querySelector('input').value = opt;
-
-                label.querySelector('input').addEventListener('change', () => {
-                    if (currentMode === 'quiz') {
-                        if (!isMulti && autoSubmitEnabled) {
-                            handleSubmitAnswer();
-                        }
-                    } else if (currentMode === 'exam') {
-                        if (isMulti) {
-                            const checkedVals = Array.from(document.querySelectorAll('input[name="msGroup"]:checked')).map(i => i.value);
-                            saveExamAnswer(checkedVals.join(' | '));
-                        } else {
-                            saveExamAnswer(opt);
-                        }
-                    }
-                });
-
-                area.appendChild(label);
-            });
-        } else {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.id = 'wiInput';
-            input.placeholder = 'Type your answer here...';
-            input.autocomplete = 'off';
-            if (existingAnswer) input.value = existingAnswer.answer;
-
-            input.addEventListener('input', (e) => {
-                if (currentMode === 'exam') saveExamAnswer(e.target.value.trim());
-            });
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    if (currentMode === 'quiz' && !existingAnswer) handleSubmitAnswer();
-                    else if (currentMode === 'quiz' && existingAnswer) navigateQuestion(1);
-                    else if (currentMode === 'exam') navigateQuestion(1);
-                }
-            });
-
-            area.appendChild(input);
-            setTimeout(() => input.focus(), 50);
-        }
-
-        updateControls();
-        if (currentMode === 'exam') updateExamDrawer();
-    }
-
-    function saveExamAnswer(val) {
-        const q = currentQuestions[currentIndex];
-        let correct = false;
-
-        if (q.Type === 'MC') {
-            correct = (val === q.Answer);
-        } else if (q.Type === 'MS') {
-            const userSet = new Set((val ? val.split(' | ') : []).map(s => s.trim()));
-            const targetSet = new Set(q.Answer.split('|').map(s => s.trim()));
-            correct = (userSet.size === targetSet.size) && [...userSet].every(item => targetSet.has(item));
-        } else {
-            try {
-                const regex = new RegExp(q.Answer, q.CaseSensitive ? '' : 'i');
-                correct = regex.test(val);
-            } catch (e) {
-                correct = false;
-            }
-        }
-        userAnswers[currentIndex] = { answer: val, isCorrect: correct };
-        updateExamDrawer();
-    }
-
-    function updateExamDrawer() {
-        const drawer = document.getElementById('examNavDrawer');
-        drawer.innerHTML = '';
-        currentQuestions.forEach((_, idx) => {
-            const node = document.createElement('div');
-            node.className = 'nav-node';
-            if (idx === currentIndex) node.classList.add('active');
-            if (userAnswers[idx] && userAnswers[idx].answer) node.classList.add('answered');
-            if (flaggedSet.has(idx)) node.classList.add('flagged');
-            node.innerText = idx + 1;
-            node.onclick = () => {
-                currentIndex = idx;
-                renderQuestion();
-            };
-            drawer.appendChild(node);
-        });
-    }
-
-    function updateControls() {
-        const btnSubmit = document.getElementById('btnSubmit');
-        const btnNext = document.getElementById('btnNext');
-        const btnPrev = document.getElementById('btnPrev');
-        const btnFinishExam = document.getElementById('btnFinishExam');
-
-        if (currentMode === 'exam') {
-            btnSubmit.classList.add('hidden');
-            btnPrev.classList.toggle('hidden', currentIndex === 0);
-            const isLast = currentIndex === currentQuestions.length - 1;
-            btnNext.classList.toggle('hidden', isLast);
-            btnFinishExam.classList.toggle('hidden', !isLast);
-        } else {
-            btnPrev.classList.add('hidden');
-            btnFinishExam.classList.add('hidden');
-            const isAnswered = userAnswers[currentIndex] !== null;
-            btnSubmit.classList.toggle('hidden', isAnswered);
-            btnNext.classList.toggle('hidden', !isAnswered);
-        }
-    }
-
-    function toggleFlag() {
-        if (flaggedSet.has(currentIndex)) {
-            flaggedSet.delete(currentIndex);
-        } else {
-            flaggedSet.add(currentIndex);
-        }
-        const btnFlag = document.getElementById('btnFlag');
-        const isFlagged = flaggedSet.has(currentIndex);
-        btnFlag.className = isFlagged ? 'btn btn-flag active' : 'btn btn-flag';
-        btnFlag.innerText = isFlagged ? '🚩 Flagged (F)' : '🚩 Flag (F)';
-        if (currentMode === 'exam') updateExamDrawer();
-    }
-
-    function handleSubmitAnswer() {
-        const q = currentQuestions[currentIndex];
-        let userAns = '';
-        let correct = false;
-
-        if (q.Type === 'MC') {
-            const checked = document.querySelector('input[name="mcGroup"]:checked');
-            if (!checked) {
-                showToast("Select an option first.");
-                return;
-            }
-            userAns = checked.value;
-            correct = (userAns === q.Answer);
-        } else if (q.Type === 'MS') {
-            const checkedNodes = Array.from(document.querySelectorAll('input[name="msGroup"]:checked'));
-            if (checkedNodes.length === 0) {
-                showToast("Select at least one option.");
-                return;
-            }
-            const checkedVals = checkedNodes.map(n => n.value);
-            userAns = checkedVals.join(' | ');
-
-            const expectedSet = new Set(q.Answer.split('|').map(s => s.trim()));
-            const userSet = new Set(checkedVals.map(s => s.trim()));
-            correct = (userSet.size === expectedSet.size) && [...userSet].every(item => expectedSet.has(item));
-        } else {
-            const input = document.getElementById('wiInput');
-            userAns = input.value.trim();
-            if (!userAns) {
-                showToast("Please enter an answer.");
-                return;
-            }
-
-            try {
-                const regex = new RegExp(q.Answer, q.CaseSensitive ? '' : 'i');
-                correct = regex.test(userAns);
-            } catch (err) {
-                correct = false;
-            }
-        }
-
-        userAnswers[currentIndex] = { answer: userAns, isCorrect: correct };
-
-        // Immediate Feedback View (Quiz Mode)
-        document.getElementById('btnSubmit').classList.add('hidden');
-        document.getElementById('btnNext').classList.remove('hidden');
-
-        if (q.Type === 'MC') {
-            document.querySelectorAll('.option-choice').forEach(lbl => {
-                lbl.classList.add('disabled');
-                const inp = lbl.querySelector('input');
-                inp.disabled = true;
-
-                if (inp.value === q.Answer) lbl.classList.add('correct');
-                if (inp.value === userAns && !correct) lbl.classList.add('wrong');
-            });
-        } else if (q.Type === 'MS') {
-            const expectedSet = new Set(q.Answer.split('|').map(s => s.trim()));
-            document.querySelectorAll('.option-choice').forEach(lbl => {
-                lbl.classList.add('disabled');
-                const inp = lbl.querySelector('input');
-                inp.disabled = true;
-
-                const isChecked = inp.checked;
-                const isExpected = expectedSet.has(inp.value.trim());
-
-                if (isChecked && isExpected) {
-                    lbl.classList.add('correct');
-                } else if (isChecked && !isExpected) {
-                    lbl.classList.add('wrong');
-                } else if (!isChecked && isExpected) {
-                    lbl.classList.add('missed');
-                }
-            });
-        } else {
-            const input = document.getElementById('wiInput');
-            input.disabled = true;
-            input.style.borderColor = correct ? 'var(--success)' : 'var(--danger)';
-        }
-
-        const feedbackArea = document.getElementById('feedbackArea');
-        let fbHTML = `<div style="margin-top: 14px; font-size: 0.95rem;">`;
-        if (correct) {
-            fbHTML += `<span style="color: var(--success); font-weight: 700;">✓ Correct!</span>`;
-        } else {
-            const cleanAnswer = q.Type === 'MS' ? q.Answer.split('|').join(', ') : cleanDisplayPattern(q.Answer);
-            fbHTML += `<span style="color: var(--danger); font-weight: 700;">✗ Incorrect.</span> Expected: <code>${esc(cleanAnswer)}</code>`;
-        }
-
-        if (q.Explanation) {
-            fbHTML += `<div class="explanation-box"><strong>Explanation:</strong> ${esc(q.Explanation)}</div>`;
-        }
-        fbHTML += `</div>`;
-        feedbackArea.innerHTML = fbHTML;
-    }
-
-    function navigateQuestion(delta) {
-        const nextIdx = currentIndex + delta;
-        if (nextIdx >= 0 && nextIdx < currentQuestions.length) {
-            currentIndex = nextIdx;
-            renderQuestion();
-        } else if (nextIdx >= currentQuestions.length && currentMode === 'quiz') {
-            finishSession();
-        }
-    }
-
-    function confirmFinishExam() {
-        const unanswered = userAnswers.filter(a => !a || !a.answer).length;
-        if (unanswered > 0) {
-            if (!confirm(`You have ${unanswered} unanswered question(s). Finish and grade exam now?`)) {
-                return;
-            }
-        }
-        finishSession();
-    }
-
-    function finishSession() {
-        document.getElementById('quiz-screen').classList.add('hidden');
-        document.getElementById('results-screen').classList.remove('hidden');
-        document.getElementById('progressBar').style.width = '100%';
-
-        const totalCorrect = userAnswers.filter(a => a && a.isCorrect).length;
-        const percent = Math.round((totalCorrect / currentQuestions.length) * 100);
-        document.getElementById('resultsSummary').innerText = `${totalCorrect} / ${currentQuestions.length} Correct (${percent}%)`;
-
-        const history = JSON.parse(localStorage.getItem('quizHistory') || '[]');
-        history.push({
-            date: new Date().toLocaleDateString(),
-            mode: currentMode,
-            score: totalCorrect,
-            total: currentQuestions.length
-        });
-        if (history.length > 50) history.shift();
-        localStorage.setItem('quizHistory', JSON.stringify(history));
-        renderHistory();
-
-        const hasWrong = userAnswers.some(a => !a || !a.isCorrect);
-        const hasFlagged = flaggedSet.size > 0;
-        document.getElementById('btnRetryWrong').classList.toggle('hidden', !hasWrong);
-        document.getElementById('btnRetryFlagged').classList.toggle('hidden', !hasFlagged);
-
-        filterResults('all');
-    }
-
-    function filterResults(type) {
-        ['btnFilterAll', 'btnFilterWrong', 'btnFilterFlagged'].forEach(id => {
-            document.getElementById(id).classList.remove('active');
-        });
-        if (type === 'all') document.getElementById('btnFilterAll').classList.add('active');
-        if (type === 'wrong') document.getElementById('btnFilterWrong').classList.add('active');
-        if (type === 'flagged') document.getElementById('btnFilterFlagged').classList.add('active');
-
-        const details = document.getElementById('resultsDetails');
-        details.innerHTML = '';
-
-        let displayed = 0;
-        currentQuestions.forEach((q, idx) => {
-            const ans = userAnswers[idx] || { answer: 'Unanswered', isCorrect: false };
-            const isFlagged = flaggedSet.has(idx);
-
-            if (type === 'wrong' && ans.isCorrect) return;
-            if (type === 'flagged' && !isFlagged) return;
-
-            displayed++;
-            const cleanAnswer = q.Type === 'MS' ? q.Answer.split('|').join(', ') : cleanDisplayPattern(q.Answer);
-            const displayUserAns = q.Type === 'MS' ? ans.answer.split(' | ').join(', ') : ans.answer;
-
-            const div = document.createElement('div');
-            div.className = `result-row ${ans.isCorrect ? 'correct' : 'wrong'} ${isFlagged ? 'flagged' : ''}`;
-            div.innerHTML = `
-                <div style="font-weight: 600; margin-bottom: 6px;">
-                    ${idx + 1}. ${esc(q.Question)} ${isFlagged ? '<span style="color: var(--warning);">🚩</span>' : ''}
-                </div>
-                <div style="font-size: 0.9rem;">Your Answer: <strong>${esc(displayUserAns)}</strong> ${ans.isCorrect ? '✅' : '❌'}</div>
-                ${!ans.isCorrect ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Correct Answer: <code>${esc(cleanAnswer)}</code></div>` : ''}
-                ${q.Explanation ? `<div class="explanation-box" style="margin-top: 8px;">${esc(q.Explanation)}</div>` : ''}
-            `;
-            details.appendChild(div);
-        });
-
-        if (displayed === 0) {
-            details.innerHTML = `<div style="color: var(--text-muted); padding: 12px 0;">No questions match this filter.</div>`;
-        }
-    }
-
-    function restartSession(subset) {
-        let pool = [];
-        if (subset === 'all') {
-            pool = currentQuestions;
-        } else if (subset === 'wrong') {
-            pool = currentQuestions.filter((_, idx) => !userAnswers[idx] || !userAnswers[idx].isCorrect);
-        } else if (subset === 'flagged') {
-            pool = currentQuestions.filter((_, idx) => flaggedSet.has(idx));
-        }
-
-        if (pool.length === 0) {
-            showToast("No questions available for this retry filter.");
-            return;
-        }
-        startSessionWithDeck(pool, false);
-    }
-
-    function confirmExitHome() {
-        if (confirm("Are you sure you want to return to the home screen? Your current session progress will be lost.")) {
-            backToSetup();
-        }
-    }
-
-    function handleBrandClick() {
-        const isQuizRunning = !document.getElementById('quiz-screen').classList.contains('hidden');
-        if (isQuizRunning) {
-            confirmExitHome();
-        } else {
-            backToSetup();
-        }
-    }
-
-    function backToSetup() {
-        document.getElementById('results-screen').classList.add('hidden');
-        document.getElementById('quiz-screen').classList.add('hidden');
-        document.getElementById('setup-screen').classList.remove('hidden');
-    }
-
-    /* ==============================
-       GLOBAL KEYBOARD SHORTCUTS
-       ============================== */
-    window.addEventListener('keydown', (e) => {
-        const tag = document.activeElement.tagName.toLowerCase();
-        if (tag === 'textarea' || (tag === 'input' && document.activeElement.id !== 'wiInput')) {
-            return;
-        }
-
-        const quizActive = !document.getElementById('quiz-screen').classList.contains('hidden');
-        if (!quizActive) return;
-
-        // F: Toggle Flag
-        if (e.key === 'f' || e.key === 'F') {
-            if (document.activeElement.id !== 'wiInput') {
-                e.preventDefault();
-                toggleFlag();
-            }
-        }
-
-        // 1-9: Select or toggle options
-        if (e.key >= '1' && e.key <= '9' && document.activeElement.id !== 'wiInput') {
-            const index = parseInt(e.key, 10) - 1;
-            const radios = document.querySelectorAll('input[name="mcGroup"]');
-            const checkboxes = document.querySelectorAll('input[name="msGroup"]');
-
-            if (radios.length > 0 && radios[index] && !radios[index].disabled) {
-                radios[index].checked = true;
-                radios[index].dispatchEvent(new Event('change'));
-            } else if (checkboxes.length > 0 && checkboxes[index] && !checkboxes[index].disabled) {
-                checkboxes[index].checked = !checkboxes[index].checked;
-                checkboxes[index].dispatchEvent(new Event('change'));
-            }
-        }
-
-        // Enter: Submit or Advance
-        if (e.key === 'Enter') {
-            const btnSubmit = document.getElementById('btnSubmit');
-            const btnNext = document.getElementById('btnNext');
-
-            if (btnSubmit && !btnSubmit.classList.contains('hidden')) {
-                btnSubmit.click();
-            } else if (btnNext && !btnNext.classList.contains('hidden')) {
-                btnNext.click();
-            }
-        }
-    });
-</script>
-
-</body>
-</html>
