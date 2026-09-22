@@ -582,7 +582,7 @@ Here is the material:
 <div id="toastContainer"></div>
 
 <!-- Faint Corner Version Indicator -->
-<div class="version-badge">v1.3.4</div>
+<div class="version-badge">v1.3.5</div>
 
 <script>
     /* ==============================
@@ -599,7 +599,7 @@ Here is the material:
 
     function exportDebugLogs() {
         const report = [
-            `--- QUIZPREP DEBUG REPORT (v1.3.4) ---`,
+            `--- QUIZPREP DEBUG REPORT (v1.3.5) ---`,
             `Time: ${new Date().toLocaleString()}`,
             `User Agent: ${navigator.userAgent}`,
             `Total Raw Questions Loaded: ${rawLoadedQuestions.length}`,
@@ -631,7 +631,7 @@ Here is the material:
     };
 
     /* ==============================
-       MULTI-SELECT DETECTION & HELPERS
+       MULTI-SELECT DETECTION & EXTRACTION
        ============================== */
     function detectIsMultiSelect(rawType, questionText, answerRaw) {
         const t = (rawType || '').trim().toUpperCase();
@@ -650,23 +650,91 @@ Here is the material:
         return false;
     }
 
-    function extractExpectedAnswers(ansStr, options = []) {
-        if (!ansStr) return [];
-        let rawList = [];
-        if (ansStr.includes('|')) {
-            rawList = ansStr.split('|');
-        } else if (ansStr.includes(';')) {
-            rawList = ansStr.split(';');
-        } else if (ansStr.includes(',')) {
-            // Only split by comma if comma is NOT part of a single choice option
-            const isSingleOpt = options.some(o => o.trim().toLowerCase() === ansStr.trim().toLowerCase());
-            rawList = isSingleOpt ? [ansStr] : ansStr.split(',');
-        } else if (/\s+and\s+/i.test(ansStr)) {
-            rawList = ansStr.split(/\s+and\s+/i);
-        } else {
-            rawList = [ansStr];
+    /**
+     * Accurately identifies which options from `options` are expected by `ansStr`
+     * without slicing inside options that happen to contain commas.
+     */
+    function getExpectedOptions(ansStr, options) {
+        if (!ansStr || !options || options.length === 0) return [];
+
+        const cleanAns = ansStr.trim();
+
+        // 1. Pipe-separated explicit matching
+        if (cleanAns.includes('|')) {
+            const parts = cleanAns.split('|').map(s => s.trim()).filter(Boolean);
+            const matched = [];
+            parts.forEach(part => {
+                options.forEach((opt, idx) => {
+                    if (isOptionMatch(opt, idx, part) && !matched.includes(opt)) {
+                        matched.push(opt);
+                    }
+                });
+            });
+            if (matched.length > 0) return matched;
         }
-        return rawList.map(s => s.trim()).filter(Boolean);
+
+        // 2. Direct whole-option text boundary match (Longest options matched first)
+        const matchedByText = [];
+        const sortedOptions = [...options].sort((a, b) => b.length - a.length);
+
+        sortedOptions.forEach(opt => {
+            const cleanOpt = opt.trim();
+            if (!cleanOpt) return;
+
+            if (cleanAns.toLowerCase() === cleanOpt.toLowerCase()) {
+                matchedByText.push(opt);
+                return;
+            }
+
+            // Word/delimiter boundary regex matching
+            const escaped = cleanOpt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp('(?:^|[\\,\\;\\|\\n\\r]|\\band\\b)\\s*' + escaped + '\\s*(?:$|[\\,\\;\\|\\n\\r]|\\band\\b)', 'i');
+            if (regex.test(cleanAns)) {
+                matchedByText.push(opt);
+            }
+        });
+
+        if (matchedByText.length > 0) {
+            return options.filter(opt => matchedByText.includes(opt));
+        }
+
+        // 3. Letter tokens (e.g. "A, E" or "A and B" or "1, 5")
+        const tokens = cleanAns.split(/[\,\;\|\s]+|\band\b/i).map(t => t.trim()).filter(Boolean);
+        const matchedByLetter = [];
+
+        tokens.forEach(tok => {
+            const u = tok.toUpperCase();
+            if (u.length === 1 && u >= 'A' && u <= 'Z') {
+                const idx = u.charCodeAt(0) - 65;
+                if (idx >= 0 && idx < options.length) {
+                    matchedByLetter.push(options[idx]);
+                }
+            } else if (/^\d+$/.test(tok)) {
+                const idx = parseInt(tok, 10) - 1;
+                if (idx >= 0 && idx < options.length) {
+                    matchedByLetter.push(options[idx]);
+                }
+            }
+        });
+
+        if (matchedByLetter.length > 0) {
+            return options.filter(opt => matchedByLetter.includes(opt));
+        }
+
+        // 4. Case-insensitive substring containment
+        const matchedByContainment = [];
+        options.forEach(opt => {
+            if (opt.trim() && cleanAns.toLowerCase().includes(opt.trim().toLowerCase())) {
+                matchedByContainment.push(opt);
+            }
+        });
+
+        if (matchedByContainment.length > 0) {
+            return options.filter(opt => matchedByContainment.includes(opt));
+        }
+
+        // 5. Fallback
+        return cleanAns.split(/[\;\|]/).map(s => s.trim()).filter(Boolean);
     }
 
     function isOptionMatch(optText, optIndex, expText) {
@@ -704,7 +772,7 @@ Here is the material:
         setTimeout(() => toast.classList.add('show'), 10);
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 3200);
+            setTimeout(() => toast.remove(), 300);
         }, 3200);
     }
 
@@ -881,24 +949,21 @@ Here is the material:
 
             if (!question) return;
 
-            // Split options using pipe
             let options = [];
             if (rawOptions) {
                 options = rawOptions.split('|').map(s => s.trim()).filter(Boolean);
-                // Recovery: if delimiter was accidentally a semicolon or newline
                 if (options.length <= 1 && rawOptions.includes(';')) {
                     options = rawOptions.split(';').map(s => s.trim()).filter(Boolean);
                 }
             }
 
-            // Recovery: If marked as MC/MS but has fewer than 2 choices, fallback to Write-In so it doesn't give away the answer
+            // Fallback for missing choices
             if ((rawType === 'MC' || rawType === 'MS') && options.length <= 1) {
                 logDebug(`Row ${rowIdx + 1}: Missing options for choice question. Falling back to WI.`, { question, options, answer: answerRaw });
                 rawType = 'WI';
                 options = [];
             }
 
-            // Intelligent Multi-Select check
             if (rawType !== 'WI') {
                 if (detectIsMultiSelect(rawType, question, answerRaw)) {
                     rawType = 'MS';
@@ -998,7 +1063,7 @@ Here is the material:
         // Type Badge
         const typeBadge = document.getElementById('typeBadge');
         if (q.Type === 'MS') {
-            const count = extractExpectedAnswers(q.Answer, q.Options).length;
+            const count = getExpectedOptions(q.Answer, q.Options).length;
             typeBadge.className = 'badge badge-multi';
             typeBadge.innerText = count > 1 ? `Multi-Select (Choose ${count})` : 'Multi-Select (Choose all that apply)';
         } else if (q.Type === 'MC') {
@@ -1100,17 +1165,10 @@ Here is the material:
             correct = (val === q.Answer);
         } else if (q.Type === 'MS') {
             const userSelections = val ? val.split(' | ') : [];
-            const expectedList = extractExpectedAnswers(q.Answer, q.Options);
+            const expectedList = getExpectedOptions(q.Answer, q.Options);
 
-            const allExpectedSelected = expectedList.every(exp => 
-                q.Options.some((opt, idx) => isOptionMatch(opt, idx, exp) && userSelections.includes(opt))
-            );
-            const noExtraSelected = userSelections.every(userOpt => 
-                expectedList.some(exp => {
-                    const optIdx = q.Options.indexOf(userOpt);
-                    return isOptionMatch(userOpt, optIdx, exp);
-                })
-            );
+            const allExpectedSelected = expectedList.every(expOpt => userSelections.includes(expOpt));
+            const noExtraSelected = userSelections.every(userOpt => expectedList.includes(userOpt));
             correct = allExpectedSelected && noExtraSelected && userSelections.length > 0;
         } else {
             try {
@@ -1198,17 +1256,10 @@ Here is the material:
             const checkedVals = checkedNodes.map(n => n.value);
             userAns = checkedVals.join(' | ');
 
-            const expectedList = extractExpectedAnswers(q.Answer, q.Options);
+            const expectedList = getExpectedOptions(q.Answer, q.Options);
 
-            const allExpectedSelected = expectedList.every(exp => 
-                q.Options.some((opt, idx) => isOptionMatch(opt, idx, exp) && checkedVals.includes(opt))
-            );
-            const noExtraSelected = checkedVals.every(userOpt => 
-                expectedList.some(exp => {
-                    const optIdx = q.Options.indexOf(userOpt);
-                    return isOptionMatch(userOpt, optIdx, exp);
-                })
-            );
+            const allExpectedSelected = expectedList.every(expOpt => checkedVals.includes(expOpt));
+            const noExtraSelected = checkedVals.every(userOpt => expectedList.includes(userOpt));
             correct = allExpectedSelected && noExtraSelected;
         } else {
             const input = document.getElementById('wiInput');
@@ -1243,15 +1294,15 @@ Here is the material:
                 if (inp.value === userAns && !correct) lbl.classList.add('wrong');
             });
         } else if (q.Type === 'MS') {
-            const expectedList = extractExpectedAnswers(q.Answer, q.Options);
-            document.querySelectorAll('.option-choice').forEach((lbl, idx) => {
+            const expectedList = getExpectedOptions(q.Answer, q.Options);
+            document.querySelectorAll('.option-choice').forEach((lbl) => {
                 lbl.classList.add('disabled');
                 const inp = lbl.querySelector('input');
                 inp.disabled = true;
 
                 const isChecked = inp.checked;
                 const optVal = inp.value;
-                const isExpected = expectedList.some(exp => isOptionMatch(optVal, idx, exp));
+                const isExpected = expectedList.includes(optVal);
 
                 if (isChecked && isExpected) {
                     lbl.classList.add('correct');
@@ -1274,7 +1325,8 @@ Here is the material:
         if (correct) {
             fbHTML += `<span style="color: var(--success); font-weight: 700;">✓ Correct!</span>`;
         } else {
-            const cleanAnswer = q.Type === 'MS' ? extractExpectedAnswers(q.Answer, q.Options).join(', ') : cleanDisplayPattern(q.Answer);
+            const expectedList = q.Type === 'MS' ? getExpectedOptions(q.Answer, q.Options) : [];
+            const cleanAnswer = q.Type === 'MS' ? expectedList.join(', ') : cleanDisplayPattern(q.Answer);
             fbHTML += `<span style="color: var(--danger); font-weight: 700;">✗ Incorrect.</span> Expected: <code>${esc(cleanAnswer)}</code>`;
         }
 
@@ -1284,7 +1336,6 @@ Here is the material:
         fbHTML += `</div>`;
         feedbackArea.innerHTML = fbHTML;
 
-        // Shift focus to Next button so a subsequent Enter press advances cleanly
         setTimeout(() => btnNext.focus(), 60);
     }
 
@@ -1356,7 +1407,8 @@ Here is the material:
             if (type === 'flagged' && !isFlagged) return;
 
             displayed++;
-            const cleanAnswer = q.Type === 'MS' ? extractExpectedAnswers(q.Answer, q.Options).join(', ') : cleanDisplayPattern(q.Answer);
+            const expectedList = q.Type === 'MS' ? getExpectedOptions(q.Answer, q.Options) : [];
+            const cleanAnswer = q.Type === 'MS' ? expectedList.join(', ') : cleanDisplayPattern(q.Answer);
             const displayUserAns = q.Type === 'MS' ? ans.answer.split(' | ').join(', ') : ans.answer;
 
             const div = document.createElement('div');
