@@ -99,6 +99,8 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin: 0;
+            cursor: pointer;
+            user-select: none;
         }
 
         /* Pill Slider Theme Switcher */
@@ -150,7 +152,7 @@
         }
 
         /* Inputs */
-        input[type="text"], textarea, select {
+        input[type="text"], input[type="number"], textarea, select {
             width: 100%;
             padding: 12px 14px;
             border-radius: var(--radius-sm);
@@ -161,12 +163,23 @@
             transition: var(--transition);
             font-family: inherit;
         }
-        input[type="text"]:focus, textarea:focus, select:focus {
+        input[type="text"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px var(--primary-light);
         }
         textarea { min-height: 90px; resize: vertical; font-family: monospace; font-size: 0.85rem; }
+
+        /* Configuration Grid */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-top: 10px;
+        }
+        @media (max-width: 600px) {
+            .config-grid { grid-template-columns: 1fr; }
+        }
 
         /* Checkboxes Grid */
         .options-grid {
@@ -368,7 +381,7 @@
 <div class="container">
     <!-- Header -->
     <header class="header">
-        <h1 class="brand">⚡ QuizPrep</h1>
+        <h1 class="brand" onclick="handleBrandClick()">⚡ QuizPrep</h1>
         <div class="pill-switch">
             <div class="pill-slider" id="pillSlider"></div>
             <button id="btnThemeLight" aria-label="Light mode" onclick="setTheme('light')">Light</button>
@@ -411,11 +424,27 @@ Here is the material:
 
             <hr>
 
-            <label style="font-weight: 600; font-size: 0.9rem;">Test Mode</label>
-            <select id="modeSelect" onchange="toggleAutoSubmitOption()" style="margin-top: 6px;">
-                <option value="quiz">Quiz Mode (Learn & practice with immediate feedback)</option>
-                <option value="exam">Exam Mode (Navigate freely, grade at the end)</option>
-            </select>
+            <div class="config-grid">
+                <div>
+                    <label style="font-weight: 600; font-size: 0.9rem;">Test Mode</label>
+                    <select id="modeSelect" onchange="toggleAutoSubmitOption()" style="margin-top: 6px;">
+                        <option value="quiz">Quiz Mode (Learn & practice)</option>
+                        <option value="exam">Exam Mode (Test environment)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-weight: 600; font-size: 0.9rem;">Quiz Length</label>
+                    <select id="lengthSelect" onchange="toggleCustomLengthInput()" style="margin-top: 6px;">
+                        <option value="all">All Available Questions</option>
+                        <option value="5">5 Questions (Randomized)</option>
+                        <option value="10">10 Questions (Randomized)</option>
+                        <option value="20">20 Questions (Randomized)</option>
+                        <option value="50">50 Questions (Randomized)</option>
+                        <option value="custom">Custom Amount...</option>
+                    </select>
+                    <input type="number" id="customLengthInput" class="hidden" min="1" placeholder="Enter number of questions..." style="margin-top: 8px;">
+                </div>
+            </div>
 
             <div class="options-grid">
                 <label class="checkbox-card">
@@ -451,8 +480,11 @@ Here is the material:
         <div id="examNavDrawer" class="nav-drawer hidden"></div>
 
         <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 20px;">
-                <span id="questionCounter" style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em;"></span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <button class="btn btn-secondary btn-sm" onclick="confirmExitHome()">🏠 Home</button>
+                    <span id="questionCounter" style="font-size: 0.85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em;"></span>
+                </div>
                 <button class="btn btn-flag" id="btnFlag" onclick="toggleFlag()">🚩 Flag (F)</button>
             </div>
 
@@ -487,10 +519,10 @@ Here is the material:
             <hr>
 
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="btn btn-secondary" onclick="restartSession('all')">🔄 Retry Same Quiz</button>
+                <button class="btn btn-secondary" onclick="restartSession('all')">🔄 Retry Same Subset</button>
                 <button class="btn btn-secondary hidden" id="btnRetryWrong" onclick="restartSession('wrong')">❌ Retry Wrong Only</button>
                 <button class="btn btn-secondary hidden" id="btnRetryFlagged" onclick="restartSession('flagged')">🚩 Retry Flagged Only</button>
-                <button class="btn btn-primary" onclick="backToSetup()">New Quiz</button>
+                <button class="btn btn-primary" onclick="backToSetup()">🏠 Return to Home</button>
             </div>
         </div>
     </main>
@@ -611,6 +643,17 @@ Here is the material:
         }
     }
 
+    function toggleCustomLengthInput() {
+        const select = document.getElementById('lengthSelect');
+        const customInput = document.getElementById('customLengthInput');
+        if (select.value === 'custom') {
+            customInput.classList.remove('hidden');
+            customInput.focus();
+        } else {
+            customInput.classList.add('hidden');
+        }
+    }
+
     function copyPrompt() {
         const text = document.getElementById('llmPrompt').value;
         navigator.clipboard.writeText(text).then(() => showToast("Prompt copied to clipboard!"));
@@ -671,7 +714,7 @@ Here is the material:
 
         // Validate and normalize rows case-insensitively
         const validated = [];
-        data.forEach((row, i) => {
+        data.forEach((row) => {
             const rowKeys = Object.keys(row);
             const findKey = (name) => rowKeys.find(k => k.toLowerCase() === name.toLowerCase());
 
@@ -708,22 +751,48 @@ Here is the material:
         }
 
         rawLoadedQuestions = validated;
-        startSessionWithDeck(rawLoadedQuestions);
+        startSessionWithDeck(rawLoadedQuestions, true);
     }
 
-    function startSessionWithDeck(questionPool) {
+    function startSessionWithDeck(questionPool, applyLengthFilter = false) {
         const shouldShuffleQ = document.getElementById('shuffleQuestions').checked;
         const shouldShuffleA = document.getElementById('shuffleAnswers').checked;
+        const lengthSelectVal = document.getElementById('lengthSelect').value;
 
-        currentQuestions = questionPool.map(q => {
+        let pool = [...questionPool];
+
+        // Apply Quiz Length Truncation
+        if (applyLengthFilter) {
+            let targetCount = pool.length;
+
+            if (lengthSelectVal === 'custom') {
+                const customVal = parseInt(document.getElementById('customLengthInput').value, 10);
+                if (!isNaN(customVal) && customVal > 0) {
+                    targetCount = Math.min(customVal, pool.length);
+                }
+            } else if (lengthSelectVal !== 'all') {
+                const num = parseInt(lengthSelectVal, 10);
+                if (!isNaN(num) && num > 0) {
+                    targetCount = Math.min(num, pool.length);
+                }
+            }
+
+            // "randomized would be assumed" when choosing a subset
+            if (targetCount < pool.length || shouldShuffleQ) {
+                pool = shuffle(pool);
+            }
+            pool = pool.slice(0, targetCount);
+        } else if (shouldShuffleQ) {
+            pool = shuffle(pool);
+        }
+
+        currentQuestions = pool.map(q => {
             let options = [...q.Options];
             if (q.Type === 'MC' && shouldShuffleA) {
                 options = shuffle(options);
             }
             return { ...q, Options: options };
         });
-
-        if (shouldShuffleQ) currentQuestions = shuffle(currentQuestions);
 
         currentIndex = 0;
         userAnswers = new Array(currentQuestions.length).fill(null);
@@ -774,7 +843,6 @@ Here is the material:
                     <span><strong style="color: var(--text-muted); margin-right: 6px;">${idx + 1}.</strong> ${esc(opt)}</span>
                 `;
 
-                // Set value via property to avoid HTML escaping issues
                 label.querySelector('input').value = opt;
 
                 label.querySelector('input').addEventListener('change', () => {
@@ -965,7 +1033,7 @@ Here is the material:
     function confirmFinishExam() {
         const unanswered = userAnswers.filter(a => !a || !a.answer).length;
         if (unanswered > 0) {
-            if (!confirm(`You have ${unanswered} unanswered question(s). Finish and grade now?`)) {
+            if (!confirm(`You have ${unanswered} unanswered question(s). Finish and grade exam now?`)) {
                 return;
             }
         }
@@ -1055,7 +1123,22 @@ Here is the material:
             showToast("No questions available for this retry filter.");
             return;
         }
-        startSessionWithDeck(pool);
+        startSessionWithDeck(pool, false);
+    }
+
+    function confirmExitHome() {
+        if (confirm("Are you sure you want to return to the home screen? Your current session progress will be lost.")) {
+            backToSetup();
+        }
+    }
+
+    function handleBrandClick() {
+        const isQuizRunning = !document.getElementById('quiz-screen').classList.contains('hidden');
+        if (isQuizRunning) {
+            confirmExitHome();
+        } else {
+            backToSetup();
+        }
     }
 
     function backToSetup() {
