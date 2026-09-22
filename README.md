@@ -42,4 +42,47 @@ A clean, modern, and privacy-first web application for practicing quizzes and si
 2. Select **Pages** from the left sidebar.
 3. Under **Branch**, select `main` (or `master`) and `/ (root)`.
 4. Click **Save**.
-5. Wait 1–2 minutes, and your site will be live at:
+5. Wait 1–2 minutes, and your site will be live at: https://github.com/KScheid/quiz-builder/blob/main/README.md
+
+---
+
+## 🤖 The LLM Workflow
+
+You don't need to manually write questions. Use any AI assistant to build tests from your materials:
+
+1. Open **QuizPrep** and click **"📋 Copy Prompt"** in Step 1.
+2. Paste the prompt into ChatGPT, Claude, or Gemini, followed by your lecture notes, textbook excerpt, or study guide.
+3. Copy the raw CSV code block the AI generates.
+4. Paste the text directly into the **"Option 1: Paste CSV Data"** field in QuizPrep.
+5. Click **Start Session**!
+
+---
+
+## 📄 CSV Format Specification
+
+If you prefer to create or store your quizzes as `.csv` files, use this structure:
+
+```csv
+Question,Type,Options,Answer,CaseSensitive
+What is the capital of France?,MC,London|Paris|Berlin|Madrid,Paris,FALSE
+Type the word "apple",WI,,^apple$,TRUE
+Who wrote Hamlet?,MC,Charles Dickens|William Shakespeare|Mark Twain,William Shakespeare,FALSE
+What is 2 + 2?,WI,,^4$,FALSE
+Does this regex match a 3 digit number (e.g. 123)?,WI,,^\d{3}$,FALSE
+
+Column Reference
+Column	Allowed Values	Description
+Question	String	The prompt or question text.
+Type	MC or WI	Multiple Choice (MC) or Write-in (WI).
+Options	Pipe-delimited (|)	The list of choices for MC. Leave blank for WI.
+Answer	String / Regex	For MC, must match an option verbatim. For WI, provide a Regex pattern (e.g., ^answer$).
+CaseSensitive	TRUE or FALSE	Controls whether write-in regex matching is case-sensitive (ignored for MC).
+🛠️ Tech Stack
+HTML5 & Vanilla JavaScript (Zero frameworks, zero build steps)
+CSS Custom Properties (Smooth dark/light transitions and glassmorphism)
+PapaParse (Fast, in-browser CSV parsing)
+GitHub Pages (Free static hosting)
+🔒 Privacy
+QuizPrep does not send your notes, questions, or quiz results to any server. Everything is parsed in your browser and saved to your device's localStorage.
+💡 About
+Created with focus, flow, and caffeine. Vibecoded from scratch. Feel free to fork, tweak, and expand!
