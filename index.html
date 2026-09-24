@@ -255,6 +255,11 @@
             color: #d97706;
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
+        .badge-warn {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
 
         /* Instruction Highlights in Question Title */
         .instruction-highlight {
@@ -462,12 +467,12 @@
             <textarea id="llmPrompt" readonly style="font-size: 0.8rem; height: 110px;">I will provide study material. Generate a quiz based strictly on this content. Format your output as a raw CSV inside a markdown code block with these exact headers:
 Question,Type,Options,Answer,CaseSensitive,Explanation
 
-Rules:
+CRITICAL RULES FOR MULTIPLE CHOICE:
 1. Always wrap fields in double quotes if they contain commas, quotes, or newlines.
 2. Type must be 'MC' (Single Choice), 'MS' (Multi-Select), or 'WI' (Write-in).
-3. For MC and MS: 'Options' MUST contain at least 4 choices separated ONLY by the pipe character (|). Never use commas to separate options.
+3. For MC and MS: 'Options' MUST contain at least 4 total choices separated ONLY by the pipe character (|). You MUST generate realistic fake choices (distractors) — NEVER output only the correct answers in Options!
 4. For MC: 'Answer' must match one single option verbatim.
-5. For MS: 'Answer' must be all correct choices separated by the pipe (|) character (e.g. Choice A|Choice C).
+5. For MS: 'Answer' must be all correct choices separated by the pipe (|) character.
 6. For WI: 'Options' must be left completely empty. 'Answer' must be a Regex pattern (e.g. ^42$ or ^Paris$).
 7. 'Explanation' should concisely explain why the answer is correct.
 
@@ -490,6 +495,13 @@ Here is the material:
             <div id="deckStatusCard" class="hidden" style="margin-top: 14px; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface-secondary); border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.85rem;">
                 <div id="deckStatsText" style="color: var(--text-main); font-weight: 600;"></div>
                 <button class="btn btn-secondary btn-sm" onclick="resetMasteryStats()" style="padding: 4px 10px; font-size: 0.78rem;">🗑️ Reset History</button>
+            </div>
+
+            <!-- Incomplete CSV Warning Banner -->
+            <div id="distractorAlertCard" class="hidden" style="margin-top: 14px; padding: 14px 18px; border-radius: var(--radius-sm); background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); font-size: 0.88rem;">
+                <div style="font-weight: 700; color: #b45309; margin-bottom: 4px;">⚠️ Incomplete Question Options Detected</div>
+                <div id="distractorAlertText" style="color: var(--text-main); margin-bottom: 10px;"></div>
+                <button class="btn btn-secondary btn-sm" onclick="copyDistractorFixPrompt()">📋 Copy AI Prompt to Add Missing Choices</button>
             </div>
 
             <hr>
@@ -571,6 +583,7 @@ Here is the material:
             <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
                 <span id="typeBadge" class="badge"></span>
                 <span id="masteryBadge" class="badge"></span>
+                <span id="noticeBadge" class="badge badge-warn hidden"></span>
             </div>
 
             <h2 id="questionTitle" style="margin-top: 4px; font-size: 1.25rem;"></h2>
@@ -617,13 +630,15 @@ Here is the material:
 <div id="toastContainer"></div>
 
 <!-- Faint Corner Version Indicator -->
-<div class="version-badge">v1.4.0</div>
+<div class="version-badge">v1.4.1</div>
 
 <script>
     /* ==============================
        DEBUG LOGGING FACILITY
        ============================== */
     const debugLogs = [];
+    let incompleteQuestions = [];
+
     function logDebug(message, data = null) {
         const time = new Date().toISOString().split('T')[1].slice(0, 8);
         const entry = `[${time}] ${message}` + (data ? ` | ${typeof data === 'object' ? JSON.stringify(data) : data}` : '');
@@ -634,13 +649,16 @@ Here is the material:
 
     function exportDebugLogs() {
         const report = [
-            `--- QUIZPREP DEBUG REPORT (v1.4.0) ---`,
+            `--- QUIZPREP DEBUG REPORT (v1.4.1) ---`,
             `Time: ${new Date().toLocaleString()}`,
             `User Agent: ${navigator.userAgent}`,
             `Total Raw Questions Loaded: ${rawLoadedQuestions.length}`,
+            `Incomplete Distractor Questions Count: ${incompleteQuestions.length}`,
             `Active Deck Length: ${currentQuestions.length}`,
             `Current Index: ${currentIndex}`,
             `Current Mode: ${currentMode}`,
+            `\n--- INCOMPLETE QUESTIONS MISSING DISTRACTORS ---`,
+            JSON.stringify(incompleteQuestions, null, 2),
             `\n--- RECENT DECK SAMPLE (First 5 Questions) ---`,
             JSON.stringify(currentQuestions.slice(0, 5), null, 2),
             `\n--- RECENT SYSTEM LOGS ---`,
@@ -651,6 +669,22 @@ Here is the material:
             showToast("Debug logs copied to clipboard!");
         }).catch(() => {
             alert("Could not access clipboard. Log contents:\n" + report.slice(0, 400));
+        });
+    }
+
+    function copyDistractorFixPrompt() {
+        if (incompleteQuestions.length === 0) return;
+        const promptLines = [
+            `Please fix the following questions in my quiz CSV. The 'Options' column is missing incorrect distractor choices. Please output the corrected CSV rows with at least 4 total choices (correct answer + realistic incorrect distractors) in the 'Options' column separated by the pipe (|) character:\n`
+        ];
+        incompleteQuestions.slice(0, 20).forEach((item, idx) => {
+            promptLines.push(`Row ${item.row}: "${item.question}"`);
+            promptLines.push(`Current Options: ${item.options.join(' | ')}`);
+            promptLines.push(`Answer: ${item.answer}\n`);
+        });
+
+        navigator.clipboard.writeText(promptLines.join('\n')).then(() => {
+            showToast("AI Fix Prompt copied! Paste into ChatGPT to add distractors.");
         });
     }
 
@@ -728,6 +762,51 @@ Here is the material:
         const statsText = document.getElementById('deckStatsText');
         statsText.innerHTML = `📊 Question Bank: <strong>${total}</strong> Total | 🆕 <strong>${unanswered}</strong> Unanswered | ❌ <strong>${missed}</strong> Missed | ⭐ <strong>${mastered}</strong> Mastered`;
         statusCard.classList.remove('hidden');
+
+        // Check for incomplete questions missing distractors
+        const alertCard = document.getElementById('distractorAlertCard');
+        const alertText = document.getElementById('distractorAlertText');
+        if (incompleteQuestions.length > 0) {
+            alertText.innerHTML = `<strong>${incompleteQuestions.length}</strong> multiple-choice question(s) only have the correct answer(s) in their Options column and are missing wrong choices (distractors).`;
+            alertCard.classList.remove('hidden');
+        } else {
+            alertCard.classList.add('hidden');
+        }
+    }
+
+    /* ==============================
+       SMART OPTION & DELIMITER PARSING
+       ============================== */
+    function parseOptionsSmart(rawOptions) {
+        if (!rawOptions) return [];
+        const raw = rawOptions.trim();
+
+        // 1. Pipe delimited
+        if (raw.includes('|')) {
+            return raw.split('|').map(s => s.trim()).filter(Boolean);
+        }
+        // 2. Semicolon delimited
+        if (raw.includes(';')) {
+            const parts = raw.split(';').map(s => s.trim()).filter(Boolean);
+            if (parts.length >= 2) return parts;
+        }
+        // 3. Newline delimited
+        if (raw.includes('\n') || raw.includes('\r')) {
+            const parts = raw.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+            if (parts.length >= 2) return parts;
+        }
+        // 4. Inline Letter labels: A. ... B. ... C. ... or A) ... B) ...
+        const letterSplit = raw.split(/(?:^|\s+)[A-E][\.\)\:\-]\s+/).map(s => s.trim()).filter(Boolean);
+        if (letterSplit.length >= 2) {
+            return letterSplit;
+        }
+        // 5. Comma delimited (if comma exists and options look like separate entries)
+        if (raw.includes(',')) {
+            const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+            if (parts.length >= 2) return parts;
+        }
+
+        return raw ? [raw] : [];
     }
 
     /* ==============================
@@ -750,10 +829,6 @@ Here is the material:
         return null;
     }
 
-    /**
-     * Accurately determines question type.
-     * Prevents false MS (checkboxes) when only 1 correct option exists.
-     */
     function determineQuestionType(rawType, questionText, answerRaw, options) {
         const t = (rawType || '').trim().toUpperCase();
         if (t === 'WI') return 'WI';
@@ -766,7 +841,6 @@ Here is the material:
         if (hasMultiPhrase) return 'MS';
         if (expected.length > 1) return 'MS';
 
-        // Demote to single-choice MC
         return 'MC';
     }
 
@@ -848,7 +922,6 @@ Here is the material:
             return options.filter(opt => matchedByContainment.includes(opt));
         }
 
-        // 5. Fallback
         return cleanAns.split(/[\;\|]/).map(s => s.trim()).filter(Boolean);
     }
 
@@ -1045,7 +1118,9 @@ Here is the material:
             return;
         }
 
+        incompleteQuestions = [];
         const validated = [];
+
         data.forEach((row, rowIdx) => {
             const rowKeys = Object.keys(row);
             const findKey = (name) => rowKeys.find(k => k.toLowerCase() === name.toLowerCase());
@@ -1064,20 +1139,21 @@ Here is the material:
 
             if (!question) return;
 
-            let options = [];
-            if (rawOptions) {
-                options = rawOptions.split('|').map(s => s.trim()).filter(Boolean);
-                if (options.length <= 1 && rawOptions.includes(';')) {
-                    options = rawOptions.split(';').map(s => s.trim()).filter(Boolean);
-                }
+            // Smart Option Parser handles pipes, semicolons, newlines, letter prefixes
+            let options = parseOptionsSmart(rawOptions);
+
+            // Audit: Detect questions missing distractors
+            if (rawType !== 'WI' && options.length < 3) {
+                incompleteQuestions.push({
+                    row: rowIdx + 1,
+                    question: question,
+                    options: options,
+                    answer: answerRaw
+                });
+                logDebug(`Row ${rowIdx + 1}: Question missing distractors (${options.length} options found)`, { question, options, answer: answerRaw });
             }
 
-            if ((rawType === 'MC' || rawType === 'MS') && options.length <= 1) {
-                logDebug(`Row ${rowIdx + 1}: Missing options for choice question. Falling back to WI.`, { question, options, answer: answerRaw });
-                rawType = 'WI';
-                options = [];
-            }
-
+            // Accurate Type determination without forced WI conversions
             rawType = determineQuestionType(rawType, question, answerRaw, options);
 
             validated.push({
@@ -1086,7 +1162,8 @@ Here is the material:
                 Options: options,
                 Answer: answerRaw,
                 CaseSensitive: (row[cKey] || '').trim().toUpperCase() === 'TRUE',
-                Explanation: (row[eKey] || '').trim()
+                Explanation: (row[eKey] || '').trim(),
+                IsIncomplete: options.length <= (getExpectedOptions(answerRaw, options).length || 1) && rawType !== 'WI'
             });
         });
 
@@ -1129,22 +1206,18 @@ Here is the material:
                     return !s || s.asked === 0 || s.wrong > 0;
                 });
             } else if (focusMode === 'weakest') {
-                // Adaptive Drilling: Sort by worst failure count, then lowest accuracy, then unanswered
                 pool.sort((a, b) => {
                     const sA = stats[getQuestionKey(a)] || { asked: 0, wrong: 0, correct: 0 };
                     const sB = stats[getQuestionKey(b)] || { asked: 0, wrong: 0, correct: 0 };
 
-                    // Most wrong answers first
                     if (sB.wrong !== sA.wrong) {
                         return sB.wrong - sA.wrong;
                     }
-                    // Lower accuracy percentage first
                     const accA = sA.asked > 0 ? (sA.correct / sA.asked) : 0.5;
                     const accB = sB.asked > 0 ? (sB.correct / sB.asked) : 0.5;
                     if (accA !== accB) {
                         return accA - accB;
                     }
-                    // Unanswered ahead of mastered
                     return (sA.asked === 0 ? -1 : 1);
                 });
             }
@@ -1170,14 +1243,12 @@ Here is the material:
                 }
             }
 
-            // If focus is NOT "weakest", randomize before slicing
             if (focusMode !== 'weakest') {
                 if (targetCount < pool.length || shouldShuffleQ) {
                     pool = shuffle(pool);
                 }
                 pool = pool.slice(0, targetCount);
             } else {
-                // For "weakest", slice the top N weakest questions first, then shuffle if requested
                 pool = pool.slice(0, targetCount);
                 if (shouldShuffleQ) {
                     pool = shuffle(pool);
@@ -1266,6 +1337,15 @@ Here is the material:
             masteryBadge.style.color = 'var(--text-muted)';
             masteryBadge.innerText = '🆕 First Time';
             masteryBadge.classList.remove('hidden');
+        }
+
+        // Warning Badge if CSV was missing distractors
+        const noticeBadge = document.getElementById('noticeBadge');
+        if (q.IsIncomplete) {
+            noticeBadge.innerText = `⚠️ Incomplete CSV Choices (${q.Options.length} choice(s))`;
+            noticeBadge.classList.remove('hidden');
+        } else {
+            noticeBadge.classList.add('hidden');
         }
 
         // Flag status
@@ -1622,7 +1702,6 @@ Here is the material:
             const cleanAnswer = q.Type === 'MS' ? expectedList.join(', ') : cleanDisplayPattern(q.Answer);
             const displayUserAns = q.Type === 'MS' ? ans.answer.split(' | ').join(', ') : ans.answer;
 
-            // Lifetime stat line
             const qStat = stats[getQuestionKey(q)];
             const statHTML = qStat && qStat.asked > 0 
                 ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Lifetime Mastery: ${qStat.correct}/${qStat.asked} correct (${Math.round((qStat.correct / qStat.asked) * 100)}%)</div>` 
