@@ -91,7 +91,7 @@
             min-height: 100vh;
         }
 
-        .container { max-width: 820px; margin: 0 auto; }
+        .container { max-width: 840px; margin: 0 auto; }
 
         /* Header */
         .header {
@@ -183,12 +183,9 @@
         /* Configuration Grid */
         .config-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 14px;
             margin-top: 10px;
-        }
-        @media (max-width: 600px) {
-            .config-grid { grid-template-columns: 1fr; }
         }
 
         /* Checkboxes Grid */
@@ -250,6 +247,7 @@
             letter-spacing: 0.05em;
             background: var(--primary-light);
             color: var(--primary);
+            margin-right: 6px;
             margin-bottom: 8px;
         }
         .badge-multi {
@@ -488,6 +486,12 @@ Here is the material:
             <label style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted);">Option 2: Upload CSV File</label>
             <input type="file" id="fileUpload" accept=".csv">
 
+            <!-- Question Bank Mastery Overview Bar -->
+            <div id="deckStatusCard" class="hidden" style="margin-top: 14px; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface-secondary); border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.85rem;">
+                <div id="deckStatsText" style="color: var(--text-main); font-weight: 600;"></div>
+                <button class="btn btn-secondary btn-sm" onclick="resetMasteryStats()" style="padding: 4px 10px; font-size: 0.78rem;">🗑️ Reset History</button>
+            </div>
+
             <hr>
 
             <div class="config-grid">
@@ -499,13 +503,23 @@ Here is the material:
                     </select>
                 </div>
                 <div>
+                    <label style="font-weight: 600; font-size: 0.9rem;">Study Focus</label>
+                    <select id="focusSelect" style="margin-top: 6px;">
+                        <option value="all">🎯 All Questions (Standard)</option>
+                        <option value="weakest">🧠 Weakest First (Most missed)</option>
+                        <option value="missed">❌ Missed Questions (Got wrong before)</option>
+                        <option value="unanswered">🆕 Unanswered Only (Never seen)</option>
+                        <option value="unanswered_missed">⚡ Unanswered + Missed</option>
+                    </select>
+                </div>
+                <div>
                     <label style="font-weight: 600; font-size: 0.9rem;">Quiz Length</label>
                     <select id="lengthSelect" onchange="toggleCustomLengthInput()" style="margin-top: 6px;">
-                        <option value="all">All Available Questions</option>
-                        <option value="5">5 Questions (Randomized)</option>
-                        <option value="10">10 Questions (Randomized)</option>
-                        <option value="20">20 Questions (Randomized)</option>
-                        <option value="50">50 Questions (Randomized)</option>
+                        <option value="all">All Available in Pool</option>
+                        <option value="5">5 Questions</option>
+                        <option value="10">10 Questions</option>
+                        <option value="20">20 Questions</option>
+                        <option value="50">50 Questions</option>
                         <option value="custom">Custom Amount...</option>
                     </select>
                     <input type="number" id="customLengthInput" class="hidden" min="1" placeholder="Enter number of questions..." style="margin-top: 8px;">
@@ -515,7 +529,7 @@ Here is the material:
             <div class="options-grid">
                 <label class="checkbox-card">
                     <input type="checkbox" id="shuffleQuestions" checked>
-                    Shuffle Questions
+                    Shuffle Question Order
                 </label>
                 <label class="checkbox-card">
                     <input type="checkbox" id="shuffleAnswers" checked>
@@ -554,8 +568,9 @@ Here is the material:
                 <button class="btn btn-flag" id="btnFlag" onclick="toggleFlag()">🚩 Flag (F)</button>
             </div>
 
-            <div>
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
                 <span id="typeBadge" class="badge"></span>
+                <span id="masteryBadge" class="badge"></span>
             </div>
 
             <h2 id="questionTitle" style="margin-top: 4px; font-size: 1.25rem;"></h2>
@@ -602,7 +617,7 @@ Here is the material:
 <div id="toastContainer"></div>
 
 <!-- Faint Corner Version Indicator -->
-<div class="version-badge">v1.3.6</div>
+<div class="version-badge">v1.4.0</div>
 
 <script>
     /* ==============================
@@ -619,7 +634,7 @@ Here is the material:
 
     function exportDebugLogs() {
         const report = [
-            `--- QUIZPREP DEBUG REPORT (v1.3.6) ---`,
+            `--- QUIZPREP DEBUG REPORT (v1.4.0) ---`,
             `Time: ${new Date().toLocaleString()}`,
             `User Agent: ${navigator.userAgent}`,
             `Total Raw Questions Loaded: ${rawLoadedQuestions.length}`,
@@ -651,13 +666,77 @@ Here is the material:
     };
 
     /* ==============================
+       QUESTION MASTERY & LIFETIME STATS
+       ============================== */
+    function getQuestionKey(q) {
+        return (q.Question || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function loadQuestionStats() {
+        return JSON.parse(localStorage.getItem('quizprep-question-stats') || '{}');
+    }
+
+    function saveQuestionStats(stats) {
+        localStorage.setItem('quizprep-question-stats', JSON.stringify(stats));
+    }
+
+    function recordQuestionStat(q, isCorrect) {
+        const key = getQuestionKey(q);
+        const stats = loadQuestionStats();
+        if (!stats[key]) {
+            stats[key] = { asked: 0, correct: 0, wrong: 0, lastAttempt: Date.now() };
+        }
+        stats[key].asked += 1;
+        if (isCorrect) {
+            stats[key].correct += 1;
+        } else {
+            stats[key].wrong += 1;
+        }
+        stats[key].lastAttempt = Date.now();
+        saveQuestionStats(stats);
+    }
+
+    function resetMasteryStats() {
+        if (confirm("Reset all question mastery and error stats? This cannot be undone.")) {
+            localStorage.removeItem('quizprep-question-stats');
+            updateDeckStatusUI();
+            showToast("Question mastery history reset.");
+        }
+    }
+
+    function updateDeckStatusUI() {
+        if (!rawLoadedQuestions || rawLoadedQuestions.length === 0) return;
+        const stats = loadQuestionStats();
+        let total = rawLoadedQuestions.length;
+        let unanswered = 0;
+        let missed = 0;
+        let mastered = 0;
+
+        rawLoadedQuestions.forEach(q => {
+            const key = getQuestionKey(q);
+            const s = stats[key];
+            if (!s || s.asked === 0) {
+                unanswered++;
+            } else if (s.wrong > 0) {
+                missed++;
+            } else if (s.asked >= 2 && s.wrong === 0) {
+                mastered++;
+            }
+        });
+
+        const statusCard = document.getElementById('deckStatusCard');
+        const statsText = document.getElementById('deckStatsText');
+        statsText.innerHTML = `📊 Question Bank: <strong>${total}</strong> Total | 🆕 <strong>${unanswered}</strong> Unanswered | ❌ <strong>${missed}</strong> Missed | ⭐ <strong>${mastered}</strong> Mastered`;
+        statusCard.classList.remove('hidden');
+    }
+
+    /* ==============================
        MULTI-SELECT & INSTRUCTION HELPERS
        ============================== */
     const MULTI_PHRASE_REGEX = /(\((?:choose|select|pick)\s+[a-z0-9\s\.\-]+\)|\b(?:choose|select|pick|which)\s+(?:two|three|four|five|2|3|4|5|both|all)(?:\s+that\s+apply)?\b|\ball\s+that\s+apply\b)/gi;
 
     function formatQuestionTitleHTML(questionText) {
         const safeText = esc(questionText);
-        // Highlight instruction phrase in amber
         return safeText.replace(MULTI_PHRASE_REGEX, match => `<span class="instruction-highlight">${match}</span>`);
     }
 
@@ -672,32 +751,25 @@ Here is the material:
     }
 
     /**
-     * Determines whether a question is truly Multi-Select.
-     * Demotes false 'MS' questions to single-choice 'MC' if only 1 answer exists.
+     * Accurately determines question type.
+     * Prevents false MS (checkboxes) when only 1 correct option exists.
      */
     function determineQuestionType(rawType, questionText, answerRaw, options) {
         const t = (rawType || '').trim().toUpperCase();
         if (t === 'WI') return 'WI';
 
         const hasMultiPhrase = MULTI_PHRASE_REGEX.test(questionText || '');
-        MULTI_PHRASE_REGEX.lastIndex = 0; // reset regex state
+        MULTI_PHRASE_REGEX.lastIndex = 0;
 
         const expected = getExpectedOptions(answerRaw, options);
 
-        // Explicit multi-select wording guarantees MS
         if (hasMultiPhrase) return 'MS';
-
-        // More than 1 distinct answer guarantees MS
         if (expected.length > 1) return 'MS';
 
-        // If CSV said MS, but answer has only 1 option and no multi phrasing, demote to single-choice MC
+        // Demote to single-choice MC
         return 'MC';
     }
 
-    /**
-     * Accurately identifies which options from `options` are expected by `ansStr`
-     * without slicing inside options that happen to contain commas.
-     */
     function getExpectedOptions(ansStr, options) {
         if (!ansStr || !options || options.length === 0) return [];
 
@@ -717,7 +789,7 @@ Here is the material:
             if (matched.length > 0) return matched;
         }
 
-        // 2. Direct whole-option text boundary match (Longest options matched first)
+        // 2. Direct whole-option text boundary match
         const matchedByText = [];
         const sortedOptions = [...options].sort((a, b) => b.length - a.length);
 
@@ -730,7 +802,6 @@ Here is the material:
                 return;
             }
 
-            // Word/delimiter boundary regex matching
             const escaped = cleanOpt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp('(?:^|[\\,\\;\\|\\n\\r]|\\band\\b)\\s*' + escaped + '\\s*(?:$|[\\,\\;\\|\\n\\r]|\\band\\b)', 'i');
             if (regex.test(cleanAns)) {
@@ -742,7 +813,7 @@ Here is the material:
             return options.filter(opt => matchedByText.includes(opt));
         }
 
-        // 3. Letter tokens (e.g. "A, E" or "A and B" or "1, 5")
+        // 3. Letter tokens
         const tokens = cleanAns.split(/[\,\;\|\s]+|\band\b/i).map(t => t.trim()).filter(Boolean);
         const matchedByLetter = [];
 
@@ -993,7 +1064,6 @@ Here is the material:
 
             if (!question) return;
 
-            // Split options using pipe
             let options = [];
             if (rawOptions) {
                 options = rawOptions.split('|').map(s => s.trim()).filter(Boolean);
@@ -1002,14 +1072,12 @@ Here is the material:
                 }
             }
 
-            // Fallback for missing choices
             if ((rawType === 'MC' || rawType === 'MS') && options.length <= 1) {
                 logDebug(`Row ${rowIdx + 1}: Missing options for choice question. Falling back to WI.`, { question, options, answer: answerRaw });
                 rawType = 'WI';
                 options = [];
             }
 
-            // Determine accurate question type
             rawType = determineQuestionType(rawType, question, answerRaw, options);
 
             validated.push({
@@ -1030,19 +1098,66 @@ Here is the material:
         }
 
         rawLoadedQuestions = validated;
+        updateDeckStatusUI();
         startSessionWithDeck(rawLoadedQuestions, true);
     }
 
-    function startSessionWithDeck(questionPool, applyLengthFilter = false) {
+    function startSessionWithDeck(questionPool, applyFilters = false) {
         const shouldShuffleQ = document.getElementById('shuffleQuestions').checked;
         const shouldShuffleA = document.getElementById('shuffleAnswers').checked;
         const lengthSelectVal = document.getElementById('lengthSelect').value;
+        const focusMode = document.getElementById('focusSelect').value;
+        const stats = loadQuestionStats();
 
         let pool = [...questionPool];
 
-        if (applyLengthFilter) {
-            let targetCount = pool.length;
+        // 1. Apply Study Focus Filter
+        if (applyFilters && focusMode !== 'all') {
+            if (focusMode === 'unanswered') {
+                pool = pool.filter(q => {
+                    const s = stats[getQuestionKey(q)];
+                    return !s || s.asked === 0;
+                });
+            } else if (focusMode === 'missed') {
+                pool = pool.filter(q => {
+                    const s = stats[getQuestionKey(q)];
+                    return s && s.wrong > 0;
+                });
+            } else if (focusMode === 'unanswered_missed') {
+                pool = pool.filter(q => {
+                    const s = stats[getQuestionKey(q)];
+                    return !s || s.asked === 0 || s.wrong > 0;
+                });
+            } else if (focusMode === 'weakest') {
+                // Adaptive Drilling: Sort by worst failure count, then lowest accuracy, then unanswered
+                pool.sort((a, b) => {
+                    const sA = stats[getQuestionKey(a)] || { asked: 0, wrong: 0, correct: 0 };
+                    const sB = stats[getQuestionKey(b)] || { asked: 0, wrong: 0, correct: 0 };
 
+                    // Most wrong answers first
+                    if (sB.wrong !== sA.wrong) {
+                        return sB.wrong - sA.wrong;
+                    }
+                    // Lower accuracy percentage first
+                    const accA = sA.asked > 0 ? (sA.correct / sA.asked) : 0.5;
+                    const accB = sB.asked > 0 ? (sB.correct / sB.asked) : 0.5;
+                    if (accA !== accB) {
+                        return accA - accB;
+                    }
+                    // Unanswered ahead of mastered
+                    return (sA.asked === 0 ? -1 : 1);
+                });
+            }
+
+            if (pool.length === 0) {
+                showToast(`No questions match the "${focusMode.replace('_', ' ')}" focus filter! Try selecting "All Questions".`);
+                return;
+            }
+        }
+
+        // 2. Apply Length Slicing
+        let targetCount = pool.length;
+        if (applyFilters) {
             if (lengthSelectVal === 'custom') {
                 const customVal = parseInt(document.getElementById('customLengthInput').value, 10);
                 if (!isNaN(customVal) && customVal > 0) {
@@ -1055,10 +1170,19 @@ Here is the material:
                 }
             }
 
-            if (targetCount < pool.length || shouldShuffleQ) {
-                pool = shuffle(pool);
+            // If focus is NOT "weakest", randomize before slicing
+            if (focusMode !== 'weakest') {
+                if (targetCount < pool.length || shouldShuffleQ) {
+                    pool = shuffle(pool);
+                }
+                pool = pool.slice(0, targetCount);
+            } else {
+                // For "weakest", slice the top N weakest questions first, then shuffle if requested
+                pool = pool.slice(0, targetCount);
+                if (shouldShuffleQ) {
+                    pool = shuffle(pool);
+                }
             }
-            pool = pool.slice(0, targetCount);
         } else if (shouldShuffleQ) {
             pool = shuffle(pool);
         }
@@ -1100,7 +1224,7 @@ Here is the material:
         document.getElementById('questionTitle').innerHTML = formatQuestionTitleHTML(q.Question);
         document.getElementById('progressBar').style.width = `${((currentIndex) / currentQuestions.length) * 100}%`;
 
-        // Type Badge with target selection count
+        // Type Badge
         const typeBadge = document.getElementById('typeBadge');
         if (q.Type === 'MS') {
             const expected = getExpectedOptions(q.Answer, q.Options);
@@ -1113,6 +1237,35 @@ Here is the material:
         } else {
             typeBadge.className = 'badge';
             typeBadge.innerText = 'Write-In';
+        }
+
+        // Lifetime Mastery Badge
+        const stats = loadQuestionStats();
+        const qStat = stats[getQuestionKey(q)];
+        const masteryBadge = document.getElementById('masteryBadge');
+        if (qStat && qStat.asked > 0) {
+            const percent = Math.round((qStat.correct / qStat.asked) * 100);
+            masteryBadge.className = 'badge';
+            if (qStat.wrong >= 3) {
+                masteryBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+                masteryBadge.style.color = '#dc2626';
+                masteryBadge.innerText = `⚠️ Missed ${qStat.wrong}x (${percent}%)`;
+            } else if (qStat.wrong > 0) {
+                masteryBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+                masteryBadge.style.color = '#d97706';
+                masteryBadge.innerText = `Missed ${qStat.wrong}x (${percent}%)`;
+            } else {
+                masteryBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+                masteryBadge.style.color = '#059669';
+                masteryBadge.innerText = `Mastered (${qStat.correct}/${qStat.asked})`;
+            }
+            masteryBadge.classList.remove('hidden');
+        } else {
+            masteryBadge.className = 'badge';
+            masteryBadge.style.background = 'var(--surface-secondary)';
+            masteryBadge.style.color = 'var(--text-muted)';
+            masteryBadge.innerText = '🆕 First Time';
+            masteryBadge.classList.remove('hidden');
         }
 
         // Flag status
@@ -1320,6 +1473,11 @@ Here is the material:
 
         userAnswers[currentIndex] = { answer: userAns, isCorrect: correct };
 
+        // Save Lifetime Mastery Stat in Quiz Mode
+        if (currentMode === 'quiz') {
+            recordQuestionStat(q, correct);
+        }
+
         // Immediate Feedback View (Quiz Mode)
         document.getElementById('btnSubmit').classList.add('hidden');
         const btnNext = document.getElementById('btnNext');
@@ -1405,6 +1563,16 @@ Here is the material:
         document.getElementById('results-screen').classList.remove('hidden');
         document.getElementById('progressBar').style.width = '100%';
 
+        // Save Lifetime Mastery Stats for Exam Mode
+        if (currentMode === 'exam') {
+            currentQuestions.forEach((q, idx) => {
+                const ans = userAnswers[idx];
+                if (ans) {
+                    recordQuestionStat(q, ans.isCorrect);
+                }
+            });
+        }
+
         const totalCorrect = userAnswers.filter(a => a && a.isCorrect).length;
         const percent = Math.round((totalCorrect / currentQuestions.length) * 100);
         document.getElementById('resultsSummary').innerText = `${totalCorrect} / ${currentQuestions.length} Correct (${percent}%)`;
@@ -1439,7 +1607,9 @@ Here is the material:
         const details = document.getElementById('resultsDetails');
         details.innerHTML = '';
 
+        const stats = loadQuestionStats();
         let displayed = 0;
+
         currentQuestions.forEach((q, idx) => {
             const ans = userAnswers[idx] || { answer: 'Unanswered', isCorrect: false };
             const isFlagged = flaggedSet.has(idx);
@@ -1452,6 +1622,12 @@ Here is the material:
             const cleanAnswer = q.Type === 'MS' ? expectedList.join(', ') : cleanDisplayPattern(q.Answer);
             const displayUserAns = q.Type === 'MS' ? ans.answer.split(' | ').join(', ') : ans.answer;
 
+            // Lifetime stat line
+            const qStat = stats[getQuestionKey(q)];
+            const statHTML = qStat && qStat.asked > 0 
+                ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Lifetime Mastery: ${qStat.correct}/${qStat.asked} correct (${Math.round((qStat.correct / qStat.asked) * 100)}%)</div>` 
+                : '';
+
             const div = document.createElement('div');
             div.className = `result-row ${ans.isCorrect ? 'correct' : 'wrong'} ${isFlagged ? 'flagged' : ''}`;
             div.innerHTML = `
@@ -1460,6 +1636,7 @@ Here is the material:
                 </div>
                 <div style="font-size: 0.9rem;">Your Answer: <strong>${esc(displayUserAns)}</strong> ${ans.isCorrect ? '✅' : '❌'}</div>
                 ${!ans.isCorrect ? `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">Correct Answer: <code>${esc(cleanAnswer)}</code></div>` : ''}
+                ${statHTML}
                 ${q.Explanation ? `<div class="explanation-box" style="margin-top: 8px;">${esc(q.Explanation)}</div>` : ''}
             `;
             details.appendChild(div);
@@ -1506,6 +1683,7 @@ Here is the material:
         document.getElementById('results-screen').classList.add('hidden');
         document.getElementById('quiz-screen').classList.add('hidden');
         document.getElementById('setup-screen').classList.remove('hidden');
+        updateDeckStatusUI();
     }
 
     /* ==============================
